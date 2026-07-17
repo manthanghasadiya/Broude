@@ -30,24 +30,47 @@ source "${SCRIPT_DIR}/lib/dep-checker.sh"
 
 # ─── Bootstrap ────────────────────────────────────────────────────────────────
 
-# Verify jq is present — fail gracefully, never block
-check_deps || exit 0
+# Slurp stdin first (before anything that might consume it)
+_RAW_STDIN="$(cat)"
 
-# Read and validate stdin JSON
-read_stdin_json || exit 0
+# Determine CWD:
+#   1. Use jq to parse the session JSON if available
+#   2. Fall back to a grep extraction from raw stdin
+#   3. Default to pwd
+CWD=""
+SESSION_ID=""
+_JQ_OK=false
 
-# Extract working directory from session event
-CWD=$(get_json_field ".cwd")
+if command -v jq &>/dev/null; then
+    _JQ_OK=true
+    if echo "$_RAW_STDIN" | jq empty 2>/dev/null; then
+        _STDIN_JSON="$_RAW_STDIN"
+        CWD=$(echo "$_STDIN_JSON" | jq -r '.cwd // empty' 2>/dev/null)
+        SESSION_ID=$(echo "$_STDIN_JSON" | jq -r '.session_id // empty' 2>/dev/null)
+    fi
+fi
+
+# Fallback: extract cwd from raw JSON via grep (no jq needed)
 if [[ -z "$CWD" ]]; then
+    CWD=$(echo "$_RAW_STDIN" | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | grep -o '"[^"]*"$' | tr -d '"' 2>/dev/null || true)
+fi
+
+# Final fallback: current working directory
+if [[ -z "$CWD" ]] || [[ ! -d "$CWD" ]]; then
     CWD="$(pwd)"
 fi
 
-SESSION_ID=$(get_json_field ".session_id")
-
-# Print report header
+# Print report header — always runs, even if jq is missing
 print_header "Session Security Audit" "$CWD"
 
-# Log session start
+# Warn about missing jq but DO NOT exit — most checks are pure bash
+if [[ "$_JQ_OK" == false ]]; then
+    log_warn "jq is not installed — secret pattern scan and dep audit unavailable"
+    log_warn "  Install jq: macOS: brew install jq | Ubuntu: sudo apt-get install -y jq"
+fi
+
+# Log session start (best-effort — audit_log is a no-op if dir unwritable)
 audit_log "INFO" "Session audit started | session=${SESSION_ID} | cwd=${CWD}"
 
 # ─── 1. Secret exposure check ─────────────────────────────────────────────────
@@ -90,10 +113,10 @@ while IFS= read -r -d '' found_env; do
     [[ "$already" == false ]] && SECRET_FILES+=("$rel")
 done < <(find "$CWD" -maxdepth 1 -name '.env*' -type f -print0 2>/dev/null)
 
-# Load secret patterns from data file
+# Load secret patterns from data file (requires jq)
 PATTERNS_FILE="${DATA_DIR}/secret-patterns.json"
 _patterns_loaded=false
-if [[ -f "$PATTERNS_FILE" ]]; then
+if [[ "$_JQ_OK" == true ]] && [[ -f "$PATTERNS_FILE" ]]; then
     if load_secret_patterns "$PATTERNS_FILE"; then
         _patterns_loaded=true
     fi
@@ -112,7 +135,6 @@ if [[ "$_patterns_loaded" == "true" ]]; then
             matches=$(scan_file_for_secrets "$abs_file")
             if [[ -n "$matches" ]]; then
                 _files_with_secrets+=("$rel_file")
-                # Print each match (dedup by pattern name)
                 while IFS= read -r match_line; do
                     local_line=$(echo "$match_line" | cut -d: -f2)
                     severity=$(echo "$match_line" | cut -d: -f3)
@@ -133,7 +155,11 @@ if [[ "$_patterns_loaded" == "true" ]]; then
         fi
     fi
 else
-    log_info "Secret pattern file not found — secret scan skipped"
+    if [[ "$_JQ_OK" == false ]]; then
+        log_info "Secret pattern scan skipped (jq required)"
+    else
+        log_info "Secret pattern file not found — secret scan skipped"
+    fi
 fi
 
 # Check .gitignore coverage for .env files
@@ -170,7 +196,9 @@ fi
 
 # ─── 2. npm dependency audit ──────────────────────────────────────────────────
 
-if [[ ! -f "${CWD}/package-lock.json" ]]; then
+if [[ "$_JQ_OK" == false ]]; then
+    log_info "npm audit skipped (jq required to parse results)"
+elif [[ ! -f "${CWD}/package-lock.json" ]]; then
     log_info "npm: no package-lock.json found — skipping npm audit"
 else
     check_npm_deps "$CWD"
@@ -178,21 +206,31 @@ fi
 
 # ─── 3. pip dependency audit ──────────────────────────────────────────────────
 
-if [[ ! -f "${CWD}/requirements.txt" ]]; then
+if [[ "$_JQ_OK" == false ]]; then
+    log_info "pip-audit skipped (jq required to parse results)"
+elif [[ ! -f "${CWD}/requirements.txt" ]]; then
     log_info "pip: no requirements.txt found — skipping pip-audit"
 else
     check_pip_deps "$CWD"
 fi
 
-# ─── 4. JetBrains plugin check ────────────────────────────────────────────────
+# ─── 4. JetBrains plugin check ─────────────────────────────────────────────────
 
 PLUGINS_FILE="${DATA_DIR}/malicious-plugins.json"
-check_jetbrains_plugins "$PLUGINS_FILE"
+if [[ "$_JQ_OK" == false ]]; then
+    log_info "JetBrains plugin check skipped (jq required)"
+else
+    check_jetbrains_plugins "$PLUGINS_FILE"
+fi
 
 # ─── 5. Chrome extension check ───────────────────────────────────────────────
 
 EXTENSIONS_FILE="${DATA_DIR}/malicious-extensions.json"
-check_chrome_extensions "$EXTENSIONS_FILE"
+if [[ "$_JQ_OK" == false ]]; then
+    log_info "Chrome extension check skipped (jq required)"
+else
+    check_chrome_extensions "$EXTENSIONS_FILE"
+fi
 
 if (( _PASS_COUNT + _WARN_COUNT + _FAIL_COUNT == 0 )); then
     # Safety net: if somehow nothing was logged, emit a neutral status

@@ -215,39 +215,34 @@ if skip_if_no_jq "full report output"; then
     assert_contains     "$output" "PASS"             "output has at least one PASS"
     assert_not_contains "$output" "NOT in .gitignore" "no env warning in clean project"
 fi
-
 # ─── Test 4: .env exists but NOT in .gitignore ────────────────────────────────
 
 echo ""
-echo -e "${BOLD}Test 4: .env exists but NOT in .gitignore — expect WARN${NC}"
+echo -e "${BOLD}Test 4: .env exists but NOT in .gitignore — expect WARN (pure bash, no jq needed)${NC}"
 
-if skip_if_no_jq ".env gitignore warning check"; then
-    env_project=$(make_temp_project)
-    git -C "$env_project" init -q 2>/dev/null || true
-    echo "SOME_VAR=value" > "${env_project}/.env"
-    echo "# nothing here" > "${env_project}/.gitignore"
-    output=$(run_hook "$env_project")
+env_project=$(make_temp_project)
+git -C "$env_project" init -q 2>/dev/null || true
+echo "SOME_VAR=value" > "${env_project}/.env"
+echo "# nothing here" > "${env_project}/.gitignore"
+output=$(run_hook "$env_project")
 
-    assert_contains "$output" "[WARN]"     "output contains WARN"
-    assert_contains "$output" ".env"       "output mentions .env"
-    assert_contains "$output" ".gitignore" "output mentions .gitignore"
-fi
+assert_contains "$output" "[WARN]"     "output contains WARN"
+assert_contains "$output" ".env"       "output mentions .env"
+assert_contains "$output" ".gitignore" "output mentions .gitignore"
 
 # ─── Test 5: .env is properly in .gitignore ───────────────────────────────────
 
 echo ""
-echo -e "${BOLD}Test 5: .env is in .gitignore — expect PASS, no gitignore WARN${NC}"
+echo -e "${BOLD}Test 5: .env is in .gitignore — expect PASS, no gitignore WARN (pure bash, no jq needed)${NC}"
 
-if skip_if_no_jq ".env gitignore PASS check"; then
-    safe_env_project=$(make_temp_project)
-    git -C "$safe_env_project" init -q 2>/dev/null || true
-    echo "SOME_VAR=value"   > "${safe_env_project}/.env"
-    printf '.env\n*.env\n'  > "${safe_env_project}/.gitignore"
-    output=$(run_hook "$safe_env_project")
+safe_env_project=$(make_temp_project)
+git -C "$safe_env_project" init -q 2>/dev/null || true
+echo "SOME_VAR=value"   > "${safe_env_project}/.env"
+printf '.env\n*.env\n'  > "${safe_env_project}/.gitignore"
+output=$(run_hook "$safe_env_project")
 
-    assert_contains     "$output" "[PASS]"            ".env covered → PASS line present"
-    assert_not_contains "$output" "NOT in .gitignore"  "no gitignore warning when covered"
-fi
+assert_contains     "$output" "[PASS]"            ".env covered → PASS line present"
+assert_not_contains "$output" "NOT in .gitignore"  "no gitignore warning when covered"
 
 # ─── Test 6: Fake API key in .env — secret detection ─────────────────────────
 
@@ -296,21 +291,19 @@ fi
 # ─── Test 8: Git-tracked .env — expect FAIL ───────────────────────────────────
 
 echo ""
-echo -e "${BOLD}Test 8: .env tracked by git — expect FAIL${NC}"
+echo -e "${BOLD}Test 8: .env tracked by git — expect FAIL (pure bash, no jq needed)${NC}"
 
-if skip_if_no_jq "git-tracked secret detection"; then
-    tracked_project=$(make_temp_project)
-    git -C "$tracked_project" init -q 2>/dev/null || true
-    git -C "$tracked_project" config user.email "test@test.com" 2>/dev/null || true
-    git -C "$tracked_project" config user.name  "Test"          2>/dev/null || true
-    echo "SECRET=oops" > "${tracked_project}/.env"
-    git -C "$tracked_project" add .env          2>/dev/null || true
-    git -C "$tracked_project" commit -q -m "whoops" 2>/dev/null || true
-    output=$(run_hook "$tracked_project")
+tracked_project=$(make_temp_project)
+git -C "$tracked_project" init -q 2>/dev/null || true
+git -C "$tracked_project" config user.email "test@test.com" 2>/dev/null || true
+git -C "$tracked_project" config user.name  "Test"          2>/dev/null || true
+echo "SECRET=oops" > "${tracked_project}/.env"
+git -C "$tracked_project" add .env          2>/dev/null || true
+git -C "$tracked_project" commit -q -m "whoops" 2>/dev/null || true
+output=$(run_hook "$tracked_project")
 
-    assert_contains "$output" "[FAIL]" "output contains FAIL for git-tracked .env"
-    assert_contains "$output" "git"    "output mentions git"
-fi
+assert_contains "$output" "[FAIL]" "output contains FAIL for git-tracked .env"
+assert_contains "$output" "git"    "output mentions git"
 
 # ─── Test 9: No package-lock.json → INFO skip message ────────────────────────
 
