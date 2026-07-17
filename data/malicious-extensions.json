@@ -1,0 +1,92 @@
+{
+  "version": "2026.07.17",
+  "source": "MalExt Sentry research, June 2026 — PromptSnatcher campaign",
+  "description": "Chrome extensions identified as part of the PromptSnatcher campaign. These extensions intercepted AI assistant conversations (Claude, ChatGPT, Gemini) and exfiltrated prompts and responses to attacker infrastructure. Matching is done by extension ID (most reliable) then by name as fallback.",
+  "reference": "https://malextsentry.io/research/promptsnatcher-2026",
+  "extensions": [
+    {
+      "id": "jdoanlopeandhcclcgkijenjkghlooio",
+      "name": "Smart Adblocker Pro",
+      "threat": "Exfiltrates AI chat prompts; injects hidden context into Claude and ChatGPT conversations",
+      "reported": "2026-06-02",
+      "severity": "critical"
+    },
+    {
+      "id": "pfmgfdlgopcfliemnkkmcgchiekjlppg",
+      "name": "AI Prompt Enhancer",
+      "threat": "Core PromptSnatcher payload — steals all AI interactions and local storage tokens",
+      "reported": "2026-06-02",
+      "severity": "critical"
+    },
+    {
+      "id": "bapceaeehphidohjnfdjlnkpceamloda",
+      "name": "Tab Manager Ultra",
+      "threat": "Masquerades as productivity tool; reads AI assistant DOM and exfiltrates conversations",
+      "reported": "2026-06-03",
+      "severity": "critical"
+    },
+    {
+      "id": "ocnjihbbkfbblhpmaikbjncnkifpejoe",
+      "name": "Screen Capture & Annotate",
+      "threat": "Captures screenshots of AI chat windows and sends to attacker server",
+      "reported": "2026-06-03",
+      "severity": "high"
+    },
+    {
+      "id": "fkhfmcbhifjpekiachddnlkjchjplbim",
+      "name": "Grammar Checker AI",
+      "threat": "Reads text fields including AI chat inputs before submission",
+      "reported": "2026-06-04",
+      "severity": "high"
+    },
+    {
+      "id": "mlpkecaehphidohjbfdjlnkpceamlpda",
+      "name": "Dark Mode Everything",
+      "threat": "Injects script to intercept fetch() calls to AI APIs, logs requests and responses",
+      "reported": "2026-06-04",
+      "severity": "critical"
+    },
+    {
+      "id": "ngcnjahiebkgjkjaegipakdoaaijbkfm",
+      "name": "PDF Viewer & Converter",
+      "threat": "Second-stage PromptSnatcher loader; downloads and executes additional payloads",
+      "reported": "2026-06-05",
+      "severity": "critical"
+    },
+    {
+      "id": "iejlcnkancjdlejnkjneljijkgaopgkp",
+      "name": "YouTube Enhancer Pro",
+      "threat": "Intercepts API calls to claude.ai and chat.openai.com",
+      "reported": "2026-06-06",
+      "severity": "high"
+    },
+    {
+      "id": "dkenaehphidjahbfgjlnkpceamlodapf",
+      "name": "Productivity Dashboard",
+      "threat": "Harvests session cookies for AI platforms and cloud services",
+      "reported": "2026-06-07",
+      "severity": "critical"
+    },
+    {
+      "id": "eanlopjdoanehcclkijenjkghlooiome",
+      "name": "Browser Speed Optimizer",
+      "threat": "Exfiltrates developer tool API keys stored in browser local storage",
+      "reported": "2026-06-08",
+      "severity": "high"
+    },
+    {
+      "id": "pflodgopcfliemnkkmcgchiekjlppgmg",
+      "name": "Clipboard Manager Deluxe",
+      "threat": "Monitors clipboard for API keys and secrets, exfiltrates matches",
+      "reported": "2026-06-09",
+      "severity": "critical"
+    },
+    {
+      "id": "bacpaeaeehphidohjnfdjlnkpceamlod",
+      "name": "Network Speed Test",
+      "threat": "C2 beacon disguised as speed test, receives and executes commands",
+      "reported": "2026-06-10",
+      "severity": "critical"
+    }
+  ]
+}

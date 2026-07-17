@@ -1,0 +1,128 @@
+{
+  "version": "2026.07.17",
+  "source": "Aikido Security research, June 2026",
+  "description": "15 malicious JetBrains Marketplace plugins discovered stealing API keys and developer credentials. Reported by Aikido Security. These plugins were distributed via the official JetBrains Marketplace and removed after disclosure.",
+  "reference": "https://www.aikido.dev/blog/malicious-jetbrains-plugins",
+  "plugins": [
+    {
+      "id": "com.github.ershov.ai-assistant-pro",
+      "name": "AI Assistant Pro",
+      "marketplace_id": "23851",
+      "threat": "Exfiltrates .env files and shell history to remote C2 server",
+      "reported": "2026-06-03",
+      "severity": "critical"
+    },
+    {
+      "id": "io.devmate.devtools.copilot-plus",
+      "name": "DevMate Copilot+",
+      "marketplace_id": "24012",
+      "threat": "Reads IDE keychain, sends credentials to attacker infrastructure",
+      "reported": "2026-06-03",
+      "severity": "critical"
+    },
+    {
+      "id": "com.codehelper.ai-complete",
+      "name": "Code Helper AI",
+      "marketplace_id": "23944",
+      "threat": "Collects API keys from open editor files and environment variables",
+      "reported": "2026-06-03",
+      "severity": "critical"
+    },
+    {
+      "id": "dev.turbo.ide-booster",
+      "name": "IDE Turbo Booster",
+      "marketplace_id": "24089",
+      "threat": "Injects malicious code into project files on save, steals git credentials",
+      "reported": "2026-06-04",
+      "severity": "critical"
+    },
+    {
+      "id": "com.smartdev.api-vault",
+      "name": "SmartDev API Vault",
+      "marketplace_id": "23978",
+      "threat": "Captures clipboard contents and .env file values, exfiltrates via DNS",
+      "reported": "2026-06-04",
+      "severity": "critical"
+    },
+    {
+      "id": "io.codeflow.smart-completion",
+      "name": "Smart Code Completion AI",
+      "marketplace_id": "24201",
+      "threat": "Backdoors the project on first open, exfiltrates secrets",
+      "reported": "2026-06-05",
+      "severity": "critical"
+    },
+    {
+      "id": "com.devpilot.productivity-suite",
+      "name": "DevPilot Productivity Suite",
+      "marketplace_id": "24315",
+      "threat": "Reads AWS credentials file, sends to remote server",
+      "reported": "2026-06-05",
+      "severity": "high"
+    },
+    {
+      "id": "net.codebuddy.enterprise",
+      "name": "CodeBuddy Enterprise",
+      "marketplace_id": "24388",
+      "threat": "Man-in-the-middle on outgoing HTTP requests to capture auth tokens",
+      "reported": "2026-06-06",
+      "severity": "critical"
+    },
+    {
+      "id": "com.aistudio.pair-programmer",
+      "name": "AI Studio Pair Programmer",
+      "marketplace_id": "24412",
+      "threat": "Steals JetBrains account session tokens and IDE license keys",
+      "reported": "2026-06-07",
+      "severity": "high"
+    },
+    {
+      "id": "io.devhawk.secret-manager",
+      "name": "DevHawk Secret Manager",
+      "marketplace_id": "24501",
+      "threat": "Ironically, reads all secrets from configured vaults and exfiltrates them",
+      "reported": "2026-06-07",
+      "severity": "critical"
+    },
+    {
+      "id": "com.quantumdev.code-lens-ai",
+      "name": "QuantumDev Code Lens AI",
+      "marketplace_id": "24567",
+      "threat": "Harvests GitHub/GitLab tokens from IDE VCS settings",
+      "reported": "2026-06-08",
+      "severity": "high"
+    },
+    {
+      "id": "org.neurode.intelliflow",
+      "name": "Neurode IntelliFlow",
+      "marketplace_id": "24623",
+      "threat": "Persistence via IDE startup task, exfiltrates SSH private keys",
+      "reported": "2026-06-09",
+      "severity": "critical"
+    },
+    {
+      "id": "com.synapse.code-optimizer-pro",
+      "name": "Synapse Code Optimizer Pro",
+      "marketplace_id": "24701",
+      "threat": "Reads .npmrc, .pypirc, and cloud provider credential files",
+      "reported": "2026-06-10",
+      "severity": "high"
+    },
+    {
+      "id": "dev.coderift.ai-agent",
+      "name": "CodeRift AI Agent",
+      "marketplace_id": "24789",
+      "threat": "Executes remote payloads downloaded from attacker-controlled CDN",
+      "reported": "2026-06-11",
+      "severity": "critical"
+    },
+    {
+      "id": "io.nexus.devops-companion",
+      "name": "Nexus DevOps Companion",
+      "marketplace_id": "24834",
+      "threat": "Intercepts Kubernetes kubeconfig and cloud CLI credentials",
+      "reported": "2026-06-12",
+      "severity": "critical"
+    }
+  ]
+}

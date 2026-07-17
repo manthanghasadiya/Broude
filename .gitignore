@@ -1,0 +1,16 @@
+# Broude runtime state directory (created by install.sh)
+.broude-installed
+
+# Temporary test artifacts
+/tmp/broude-test-*
+
+# Editor files
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Audit logs (stored in ~/.broude/, not in repo)
+*.log
