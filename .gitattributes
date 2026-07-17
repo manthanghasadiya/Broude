@@ -1,0 +1,17 @@
+# Broude .gitattributes
+# Ensures shell scripts keep LF line endings everywhere (required for bash)
+
+* text=auto
+
+# Force LF for all shell scripts — CRLF breaks bash on macOS/Linux
+*.sh text eol=lf
+
+# Force LF for JSON data files
+*.json text eol=lf
+
+# Force LF for markdown
+*.md text eol=lf
+
+# Force LF for text files
+*.txt text eol=lf
+LICENSE text eol=lf
