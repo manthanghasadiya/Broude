@@ -132,7 +132,7 @@ if [[ "$_patterns_loaded" == "true" ]]; then
         abs_file="${CWD}/${rel_file}"
         if [[ -f "$abs_file" ]]; then
             _scanned_files=$(( _scanned_files + 1 ))
-            matches=$(scan_file_for_secrets "$abs_file")
+            matches=$(scan_file_for_secrets "$abs_file") || true
             if [[ -n "$matches" ]]; then
                 _files_with_secrets+=("$rel_file")
                 while IFS= read -r match_line; do

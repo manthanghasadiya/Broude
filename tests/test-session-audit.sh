@@ -43,7 +43,7 @@ command -v jq &>/dev/null && JQ_AVAILABLE=true
 # Cleanup on exit — removes all temp project directories
 cleanup() {
     for d in "${TEMP_DIRS[@]+"${TEMP_DIRS[@]}"}"; do
-        rm -rf "$d" 2>/dev/null || true
+        rm -rf "$d"  || true
     done
 }
 trap cleanup EXIT
@@ -65,7 +65,7 @@ run_hook() {
     local cwd="${1:-/tmp}"
     local session_json
     session_json="{\"session_id\":\"test-$$\",\"type\":\"init\",\"cwd\":\"${cwd}\",\"timestamp\":\"2026-07-17T00:00:00Z\"}"
-    echo "$session_json" | bash "$HOOK" 2>/dev/null || true
+    echo "$session_json" | bash "$HOOK"  || true
 }
 
 # pass: record a PASS with a message.
@@ -207,7 +207,7 @@ echo -e "${BOLD}Test 3: Clean project with jq — header + footer present${NC}"
 
 if skip_if_no_jq "full report output"; then
     clean_project=$(make_temp_project)
-    git -C "$clean_project" init -q 2>/dev/null || true
+    git -C "$clean_project" init -q  || true
     output=$(run_hook "$clean_project")
 
     assert_contains     "$output" "Risk:"            "footer Risk line present"
@@ -221,7 +221,7 @@ echo ""
 echo -e "${BOLD}Test 4: .env exists but NOT in .gitignore — expect WARN (pure bash, no jq needed)${NC}"
 
 env_project=$(make_temp_project)
-git -C "$env_project" init -q 2>/dev/null || true
+git -C "$env_project" init -q  || true
 echo "SOME_VAR=value" > "${env_project}/.env"
 echo "# nothing here" > "${env_project}/.gitignore"
 output=$(run_hook "$env_project")
@@ -236,7 +236,7 @@ echo ""
 echo -e "${BOLD}Test 5: .env is in .gitignore — expect PASS, no gitignore WARN (pure bash, no jq needed)${NC}"
 
 safe_env_project=$(make_temp_project)
-git -C "$safe_env_project" init -q 2>/dev/null || true
+git -C "$safe_env_project" init -q  || true
 echo "SOME_VAR=value"   > "${safe_env_project}/.env"
 printf '.env\n*.env\n'  > "${safe_env_project}/.gitignore"
 output=$(run_hook "$safe_env_project")
@@ -251,7 +251,7 @@ echo -e "${BOLD}Test 6: Fake API key in .env — expect secret detection WARN${N
 
 if skip_if_no_jq "secret detection"; then
     secret_project=$(make_temp_project)
-    git -C "$secret_project" init -q 2>/dev/null || true
+    git -C "$secret_project" init -q  || true
     cat > "${secret_project}/.env" << 'ENVEOF'
 # Fake keys for testing — NOT real credentials
 OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF
@@ -275,7 +275,7 @@ echo -e "${BOLD}Test 7: .env.test with fake key — dynamic .env* glob catches i
 
 if skip_if_no_jq ".env.test glob scan"; then
     envtest_project=$(make_temp_project)
-    git -C "$envtest_project" init -q 2>/dev/null || true
+    git -C "$envtest_project" init -q  || true
     cat > "${envtest_project}/.env.test" << 'ENVEOF'
 OPENAI_API_KEY=sk-test1234567890abcdefghijklmnop
 ENVEOF
@@ -294,12 +294,12 @@ echo ""
 echo -e "${BOLD}Test 8: .env tracked by git — expect FAIL (pure bash, no jq needed)${NC}"
 
 tracked_project=$(make_temp_project)
-git -C "$tracked_project" init -q 2>/dev/null || true
-git -C "$tracked_project" config user.email "test@test.com" 2>/dev/null || true
-git -C "$tracked_project" config user.name  "Test"          2>/dev/null || true
+git -C "$tracked_project" init -q  || true
+git -C "$tracked_project" config user.email "test@test.com"  || true
+git -C "$tracked_project" config user.name  "Test"           || true
 echo "SECRET=oops" > "${tracked_project}/.env"
-git -C "$tracked_project" add .env          2>/dev/null || true
-git -C "$tracked_project" commit -q -m "whoops" 2>/dev/null || true
+git -C "$tracked_project" add .env           || true
+git -C "$tracked_project" commit -q -m "whoops"  || true
 output=$(run_hook "$tracked_project")
 
 assert_contains "$output" "[FAIL]" "output contains FAIL for git-tracked .env"
