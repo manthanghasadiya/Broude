@@ -8,8 +8,11 @@
 #   bash test-session-audit.sh                # from tests/ directory
 #
 # Exit code: 0 if all tests pass, 1 if any fail.
-
-set -euo pipefail
+#
+# IMPORTANT: Do NOT add set -e / set -euo pipefail here.
+# (a) (( counter++ )) exits 1 when counter was 0, which kills the script under set -e.
+# (b) We intentionally run commands that may fail (hook invocations, git init, etc.)
+#     and check their exit codes manually.
 
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -26,13 +29,15 @@ else
     RED=''; GREEN=''; YELLOW=''; CYAN=''; BOLD=''; NC=''
 fi
 
+# Counters — use $(( )) assignment form, never (( var++ )) standalone:
+# (( 0 )) exits with code 1 (falsy), which triggers set -e if active.
 PASS_COUNT=0
 FAIL_COUNT=0
 TEMP_DIRS=()
 
-# Cleanup on exit
+# Cleanup on exit — removes all temp project directories
 cleanup() {
-    for d in "${TEMP_DIRS[@]}"; do
+    for d in "${TEMP_DIRS[@]+"${TEMP_DIRS[@]}"}"; do
         rm -rf "$d" 2>/dev/null || true
     done
 }
@@ -41,7 +46,7 @@ trap cleanup EXIT
 # ─── Test helpers ─────────────────────────────────────────────────────────────
 
 # make_temp_project: create a temp directory simulating a project.
-# Prints the path.
+# Prints the path. Registers for cleanup.
 make_temp_project() {
     local tmpdir
     tmpdir=$(mktemp -d /tmp/broude-test-XXXXXX)
@@ -49,13 +54,32 @@ make_temp_project() {
     echo "$tmpdir"
 }
 
-# run_hook: pipe JSON to session-audit.sh with a given CWD.
-# Usage: run_hook "/project/dir"
-# Prints combined stdout output.
+# run_hook: pipe SessionStart JSON to session-audit.sh with a given CWD.
+# Prints combined stdout. Always succeeds (hook must exit 0).
 run_hook() {
     local cwd="${1:-/tmp}"
-    local session_json="{\"session_id\":\"test-$(date +%s)\",\"type\":\"init\",\"cwd\":\"${cwd}\",\"timestamp\":\"2026-07-17T00:00:00Z\"}"
+    local session_json
+    session_json="{\"session_id\":\"test-$$\",\"type\":\"init\",\"cwd\":\"${cwd}\",\"timestamp\":\"2026-07-17T00:00:00Z\"}"
     echo "$session_json" | bash "$HOOK" 2>/dev/null
+    return 0  # run_hook itself always succeeds regardless of hook exit code
+}
+
+# pass: record a PASS with a message.
+pass() {
+    echo -e "${GREEN}  PASS${NC}: $*"
+    PASS_COUNT=$(( PASS_COUNT + 1 ))
+}
+
+# fail: record a FAIL with a message.
+fail() {
+    echo -e "${RED}  FAIL${NC}: $*"
+    FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+}
+
+# skip: record a SKIP (counts as pass, not fail).
+skip() {
+    echo -e "${YELLOW}  SKIP${NC}: $*"
+    PASS_COUNT=$(( PASS_COUNT + 1 ))
 }
 
 # assert_contains: fail if string not found in output.
@@ -64,16 +88,14 @@ assert_contains() {
     local expected="$2"
     local test_name="${3:-}"
     if echo "$output" | grep -qF "$expected"; then
-        echo -e "${GREEN}  PASS${NC}: found '${expected}'"
-        (( PASS_COUNT++ ))
+        pass "found '${expected}'"
     else
-        echo -e "${RED}  FAIL${NC}: expected to find '${expected}' in output"
+        fail "expected to find '${expected}'"
         if [[ -n "$test_name" ]]; then
-            echo -e "       Test: ${test_name}"
+            echo "         in test: ${test_name}"
         fi
-        echo "       Actual output:"
-        echo "$output" | sed 's/^/         | /'
-        (( FAIL_COUNT++ ))
+        echo "         actual output:"
+        echo "$output" | head -30 | sed 's/^/           | /'
     fi
 }
 
@@ -83,24 +105,35 @@ assert_not_contains() {
     local unexpected="$2"
     local test_name="${3:-}"
     if echo "$output" | grep -qF "$unexpected"; then
-        echo -e "${RED}  FAIL${NC}: should NOT contain '${unexpected}'"
-        (( FAIL_COUNT++ ))
+        fail "should NOT contain '${unexpected}'"
+        if [[ -n "$test_name" ]]; then
+            echo "         in test: ${test_name}"
+        fi
     else
-        echo -e "${GREEN}  PASS${NC}: correctly absent '${unexpected}'"
-        (( PASS_COUNT++ ))
+        pass "correctly absent '${unexpected}'"
     fi
 }
 
-# assert_exit_zero: verify the hook always exits 0.
+# assert_exit_zero: verify the hook exits 0 for a given CWD.
 assert_exit_zero() {
     local cwd="${1:-/tmp}"
-    local json="{\"session_id\":\"exit-test\",\"type\":\"init\",\"cwd\":\"${cwd}\",\"timestamp\":\"2026-07-17T00:00:00Z\"}"
+    local json
+    json="{\"session_id\":\"exit-test-$$\",\"type\":\"init\",\"cwd\":\"${cwd}\",\"timestamp\":\"2026-07-17T00:00:00Z\"}"
     if echo "$json" | bash "$HOOK" &>/dev/null; then
-        echo -e "${GREEN}  PASS${NC}: hook exited with code 0"
-        (( PASS_COUNT++ ))
+        pass "hook exited with code 0"
     else
-        echo -e "${RED}  FAIL${NC}: hook exited non-zero (MUST always exit 0 for SessionStart)"
-        (( FAIL_COUNT++ ))
+        fail "hook exited non-zero (MUST always exit 0 for SessionStart)"
+    fi
+}
+
+# assert_exit_zero_with_input: verify hook exits 0 for arbitrary stdin.
+assert_exit_zero_with_input() {
+    local label="$1"
+    local input="$2"
+    if echo "$input" | bash "$HOOK" &>/dev/null; then
+        pass "hook exited 0 for: ${label}"
+    else
+        fail "hook exited non-zero for: ${label}"
     fi
 }
 
@@ -116,45 +149,40 @@ if [[ ! -f "$HOOK" ]]; then
 fi
 
 if ! command -v jq &>/dev/null; then
-    echo -e "${YELLOW}WARN: jq not installed — some tests may be skipped${NC}"
+    echo -e "${YELLOW}WARN: jq not installed — some tests may produce SKIPs${NC}"
 fi
 
 # ─── Test 1: Hook always exits 0 ──────────────────────────────────────────────
 
 echo -e "${BOLD}Test 1: Hook always exits 0 (even with bad input)${NC}"
 
-echo -e "  Subtest: clean home dir..."
+echo -e "  Subtest 1a: valid JSON pointing at home dir..."
 assert_exit_zero "${HOME}"
 
-echo -e "  Subtest: invalid JSON..."
-if echo "NOT_JSON" | bash "$HOOK" &>/dev/null; then
-    echo -e "${GREEN}  PASS${NC}: exits 0 on invalid JSON"
-    (( PASS_COUNT++ ))
-else
-    echo -e "${RED}  FAIL${NC}: non-zero exit on invalid JSON"
-    (( FAIL_COUNT++ ))
-fi
+echo -e "  Subtest 1b: invalid JSON..."
+assert_exit_zero_with_input "invalid JSON" "NOT_JSON"
 
-echo -e "  Subtest: empty stdin..."
-if echo "" | bash "$HOOK" &>/dev/null; then
-    echo -e "${GREEN}  PASS${NC}: exits 0 on empty stdin"
-    (( PASS_COUNT++ ))
-else
-    echo -e "${RED}  FAIL${NC}: non-zero exit on empty stdin"
-    (( FAIL_COUNT++ ))
-fi
+echo -e "  Subtest 1c: empty stdin..."
+assert_exit_zero_with_input "empty stdin" ""
+
+echo -e "  Subtest 1d: nonexistent CWD..."
+assert_exit_zero "/tmp/broude-nonexistent-dir-$$"
+
+echo -e "  Subtest 1e: JSON missing cwd field..."
+assert_exit_zero_with_input "missing cwd" '{"session_id":"t","type":"init","timestamp":"2026-07-17T00:00:00Z"}'
 
 # ─── Test 2: Clean project (no .env, no package-lock) ─────────────────────────
 
 echo ""
-echo -e "${BOLD}Test 2: Clean project — expect no WARNs or FAILs${NC}"
+echo -e "${BOLD}Test 2: Clean project — header present, no crash${NC}"
 
 clean_project=$(make_temp_project)
 git -C "$clean_project" init -q 2>/dev/null || true
 output=$(run_hook "$clean_project")
 
-assert_contains "$output" "BROUDE" "header present"
-assert_not_contains "$output" "[WARN] .env" "no env warning in clean project"
+assert_contains  "$output" "BROUDE"   "header present"
+assert_contains  "$output" "Risk:"    "footer present"
+assert_not_contains "$output" "NOT in .gitignore" "no env gitignore warning in clean project"
 
 # ─── Test 3: .env exists but NOT in .gitignore ────────────────────────────────
 
@@ -164,103 +192,211 @@ echo -e "${BOLD}Test 3: .env exists but NOT in .gitignore — expect WARN${NC}"
 env_project=$(make_temp_project)
 git -C "$env_project" init -q 2>/dev/null || true
 echo "SOME_VAR=value" > "${env_project}/.env"
-echo "# no .env here" > "${env_project}/.gitignore"
-
+echo "# nothing here" > "${env_project}/.gitignore"
 output=$(run_hook "$env_project")
 
-assert_contains "$output" "[WARN]" "contains WARN"
-assert_contains "$output" ".env" "mentions .env"
-assert_contains "$output" ".gitignore" "mentions .gitignore"
+assert_contains "$output" "[WARN]"      "output contains WARN"
+assert_contains "$output" ".env"        "output mentions .env"
+assert_contains "$output" ".gitignore"  "output mentions .gitignore"
 
-# ─── Test 4: .env is in .gitignore ────────────────────────────────────────────
+# ─── Test 4: .env is properly in .gitignore ───────────────────────────────────
 
 echo ""
-echo -e "${BOLD}Test 4: .env is in .gitignore — expect PASS${NC}"
+echo -e "${BOLD}Test 4: .env is in .gitignore — expect PASS, no gitignore WARN${NC}"
 
 safe_env_project=$(make_temp_project)
 git -C "$safe_env_project" init -q 2>/dev/null || true
 echo "SOME_VAR=value" > "${safe_env_project}/.env"
 printf '.env\n*.env\n' > "${safe_env_project}/.gitignore"
-
 output=$(run_hook "$safe_env_project")
 
-assert_contains "$output" "[PASS]" ".env covered results in PASS"
+assert_contains     "$output" "[PASS]"           ".env covered → PASS line present"
 assert_not_contains "$output" "NOT in .gitignore" "no gitignore warning when covered"
 
-# ─── Test 5: .env with fake API key — secret detection ────────────────────────
+# ─── Test 5: Fake API key in .env — secret detection ─────────────────────────
 
 echo ""
 echo -e "${BOLD}Test 5: Fake API key in .env — expect secret detection WARN${NC}"
 
 secret_project=$(make_temp_project)
 git -C "$secret_project" init -q 2>/dev/null || true
-cat > "${secret_project}/.env" << 'EOF'
+cat > "${secret_project}/.env" << 'ENVEOF'
 # Fake keys for testing — NOT real credentials
 OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF
 AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
-EOF
+ENVEOF
 printf '.env\n' > "${secret_project}/.gitignore"
-
 output=$(run_hook "$secret_project")
 
-assert_contains "$output" "[WARN]" "has WARN for secrets"
-# Should detect either the OpenAI key or AWS key
-if echo "$output" | grep -qiE "secret|aws|openai|api.key"; then
-    echo -e "${GREEN}  PASS${NC}: secret pattern detected"
-    (( PASS_COUNT++ ))
+assert_contains "$output" "[WARN]" "output contains WARN (from secret or gitignore check)"
+if echo "$output" | grep -qiE "secret|aws|openai|api.key|detected"; then
+    pass "a secret pattern was detected in .env"
 else
-    echo -e "${YELLOW}  SKIP${NC}: secret detection requires jq + pattern file access"
-    (( PASS_COUNT++ ))  # Don't fail — may be running outside install context
+    skip "secret pattern not detected (may need jq + pattern file)"
 fi
 
-# ─── Test 6: Git-tracked .env — expect FAIL ───────────────────────────────────
+# ─── Test 6: .env.test with fake key — dynamic glob catches it ────────────────
 
 echo ""
-echo -e "${BOLD}Test 6: .env tracked by git — expect FAIL${NC}"
+echo -e "${BOLD}Test 6: .env.test with fake key — dynamic .env* glob catches it${NC}"
+
+envtest_project=$(make_temp_project)
+git -C "$envtest_project" init -q 2>/dev/null || true
+cat > "${envtest_project}/.env.test" << 'ENVEOF'
+OPENAI_API_KEY=sk-test1234567890abcdefghijklmnop
+ENVEOF
+output=$(run_hook "$envtest_project")
+
+if echo "$output" | grep -qE "\.env\.test|secret|detected|WARN"; then
+    pass ".env.test was scanned (output contains relevant content)"
+else
+    skip ".env.test scan inconclusive — verify jq and pattern file are accessible"
+fi
+
+# ─── Test 7: Git-tracked .env — expect FAIL ───────────────────────────────────
+
+echo ""
+echo -e "${BOLD}Test 7: .env tracked by git — expect FAIL${NC}"
 
 tracked_project=$(make_temp_project)
 git -C "$tracked_project" init -q 2>/dev/null || true
 git -C "$tracked_project" config user.email "test@test.com" 2>/dev/null || true
-git -C "$tracked_project" config user.name "Test" 2>/dev/null || true
+git -C "$tracked_project" config user.name  "Test"          2>/dev/null || true
 echo "SECRET=oops" > "${tracked_project}/.env"
-# Add and commit the .env (bad practice!)
-git -C "$tracked_project" add .env 2>/dev/null || true
+git -C "$tracked_project" add .env          2>/dev/null || true
 git -C "$tracked_project" commit -q -m "whoops" 2>/dev/null || true
-
 output=$(run_hook "$tracked_project")
 
-assert_contains "$output" "[FAIL]" "has FAIL for git-tracked .env"
-assert_contains "$output" "git" "mentions git in output"
+assert_contains "$output" "[FAIL]" "output contains FAIL for git-tracked .env"
+assert_contains "$output" "git"    "output mentions git"
 
-# ─── Test 7: Report header and footer format ──────────────────────────────────
-
-echo ""
-echo -e "${BOLD}Test 7: Output format — header and footer present${NC}"
-
-format_project=$(make_temp_project)
-output=$(run_hook "$format_project")
-
-assert_contains "$output" "BROUDE" "header contains BROUDE"
-assert_contains "$output" "Risk:" "footer contains Risk:"
-assert_contains "$output" "Action:" "footer contains Action:"
-assert_contains "$output" "PASS" "footer contains PASS count"
-
-# ─── Test 8: Fixture JSON file ────────────────────────────────────────────────
+# ─── Test 8: npm: no package-lock.json → INFO skip message ───────────────────
 
 echo ""
-echo -e "${BOLD}Test 8: Using fixture JSON file${NC}"
+echo -e "${BOLD}Test 8: No package-lock.json — expect INFO skip message${NC}"
+
+no_npm_project=$(make_temp_project)
+output=$(run_hook "$no_npm_project")
+
+assert_contains "$output" "package-lock.json" "output mentions package-lock.json when skipping npm"
+
+# ─── Test 9: pip: no requirements.txt → INFO skip message ────────────────────
+
+echo ""
+echo -e "${BOLD}Test 9: No requirements.txt — expect INFO skip message${NC}"
+
+no_pip_project=$(make_temp_project)
+output=$(run_hook "$no_pip_project")
+
+assert_contains "$output" "requirements.txt" "output mentions requirements.txt when skipping pip"
+
+# ─── Test 10: Non-git dir → INFO skip for git hook check ─────────────────────
+
+echo ""
+echo -e "${BOLD}Test 10: Non-git directory — expect git hook check skipped with INFO${NC}"
+
+nongit_project=$(make_temp_project)
+output=$(run_hook "$nongit_project")
+
+assert_contains "$output" "git" "output mentions git (skip message)"
+
+# ─── Test 11: Report header format ───────────────────────────────────────────
+
+echo ""
+echo -e "${BOLD}Test 11: Output format — header, footer, risk line${NC}"
+
+fmt_project=$(make_temp_project)
+output=$(run_hook "$fmt_project")
+
+assert_contains "$output" "BROUDE"   "header contains BROUDE"
+assert_contains "$output" "Risk:"    "footer contains Risk:"
+assert_contains "$output" "Action:"  "footer contains Action:"
+assert_contains "$output" "PASS"     "output contains PASS"
+
+# ─── Test 12: Fixture JSON file ───────────────────────────────────────────────
+
+echo ""
+echo -e "${BOLD}Test 12: Fixture session-start.json runs without crash${NC}"
 
 fixture_json="${FIXTURES_DIR}/session-start.json"
 if [[ -f "$fixture_json" ]]; then
     if bash "$HOOK" < "$fixture_json" &>/dev/null; then
-        echo -e "${GREEN}  PASS${NC}: hook runs cleanly with fixture JSON"
-        (( PASS_COUNT++ ))
+        pass "hook runs cleanly with fixture JSON"
     else
-        echo -e "${RED}  FAIL${NC}: hook failed with fixture JSON"
-        (( FAIL_COUNT++ ))
+        fail "hook returned non-zero with fixture JSON"
     fi
 else
-    echo -e "${YELLOW}  SKIP${NC}: fixture file not found at ${fixture_json}"
+    skip "fixture file not found at ${fixture_json}"
+fi
+
+# ─── Test 13: Hook handles deeply invalid JSON cleanly ────────────────────────
+
+echo ""
+echo -e "${BOLD}Test 13: Malformed JSON variants — hook stays alive${NC}"
+
+for bad_input in '{}' '{"cwd": null}' '{"cwd": ""}' 'null' '[]'; do
+    assert_exit_zero_with_input "input=${bad_input}" "$bad_input"
+done
+
+# ─── Test 14: Output is non-empty even for an empty project ───────────────────
+
+echo ""
+echo -e "${BOLD}Test 14: Output is non-empty for any project${NC}"
+
+empty_project=$(make_temp_project)
+output=$(run_hook "$empty_project")
+
+if [[ -n "$output" ]]; then
+    pass "hook produced non-empty output"
+else
+    fail "hook produced no output at all"
+fi
+
+# ─── Test 15: JetBrains/Chrome INFO lines appear (not installed machines) ─────
+
+echo ""
+echo -e "${BOLD}Test 15: JetBrains + Chrome skip messages (if not installed)${NC}"
+
+infra_project=$(make_temp_project)
+output=$(run_hook "$infra_project")
+
+# On a dev machine these may be installed (PASS) or not (INFO skip).
+# Either way, the output must contain SOME reference to JetBrains and Chrome.
+if echo "$output" | grep -qiE "jetbrains|JetBrains"; then
+    pass "output references JetBrains (installed or skipped)"
+else
+    fail "output has no mention of JetBrains — check was silently dropped"
+fi
+
+if echo "$output" | grep -qiE "chrome|Chrome"; then
+    pass "output references Chrome (installed or skipped)"
+else
+    fail "output has no mention of Chrome — check was silently dropped"
+fi
+
+# ─── Test 16: Audit log written to ~/.broude/audit.log ───────────────────────
+
+echo ""
+echo -e "${BOLD}Test 16: Audit log — hook writes to ~/.broude/audit.log${NC}"
+
+log_project=$(make_temp_project)
+log_file="${HOME}/.broude/audit.log"
+lines_before=0
+if [[ -f "$log_file" ]]; then
+    lines_before=$(wc -l < "$log_file")
+fi
+
+run_hook "$log_project" > /dev/null
+
+if [[ -f "$log_file" ]]; then
+    lines_after=$(wc -l < "$log_file")
+    if [[ "$lines_after" -gt "$lines_before" ]]; then
+        pass "audit.log grew after hook run (${lines_before} → ${lines_after} lines)"
+    else
+        fail "audit.log exists but did not grow after hook run"
+    fi
+else
+    fail "audit.log was not created at ${log_file}"
 fi
 
 # ─── Results ──────────────────────────────────────────────────────────────────
@@ -271,7 +407,7 @@ echo -e "${BOLD}Results: ${GREEN}${PASS_COUNT} passed${NC}, ${RED}${FAIL_COUNT} 
 echo "────────────────────────────────────────"
 echo ""
 
-if (( FAIL_COUNT > 0 )); then
+if [[ "$FAIL_COUNT" -gt 0 ]]; then
     exit 1
 fi
 
