@@ -7,7 +7,15 @@
 #
 # EXIT CODE: Always 0. Session audit is informational — never blocks session start.
 
-set -euo pipefail
+# Bug 1 fix: no set -euo pipefail — it causes any subcommand failure to propagate.
+# Instead we handle errors explicitly and use a global trap to guarantee exit 0.
+_broude_crashed() {
+    echo ""
+    echo "[BROUDE ERROR] Audit crashed unexpectedly (line ${1}). Session is unaffected."
+    echo ""
+    exit 0
+}
+trap '_broude_crashed ${LINENO}' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="${SCRIPT_DIR}/../data"
@@ -44,14 +52,17 @@ audit_log "INFO" "Session audit started | session=${SESSION_ID} | cwd=${CWD}"
 
 # ─── 1. Secret exposure check ─────────────────────────────────────────────────
 
-# List of common files that frequently contain secrets
-SECRET_FILES=(
+# List of common files that frequently contain secrets.
+# Also glob any .env* files present in CWD at scan time.
+SECRET_FILES_STATIC=(
     ".env"
     ".env.local"
     ".env.development"
     ".env.staging"
     ".env.production"
     ".env.test"
+    ".env.example"
+    ".env.sample"
     "config.json"
     "config.yaml"
     "config.yml"
@@ -66,6 +77,18 @@ SECRET_FILES=(
     ".aws/credentials"
     ".npmrc"
 )
+
+# Dynamically add any .env* files found in CWD that aren't already in the list
+SECRET_FILES=("${SECRET_FILES_STATIC[@]}")
+while IFS= read -r -d '' found_env; do
+    rel="${found_env#${CWD}/}"
+    # Only add if not already in the static list
+    already=false
+    for existing in "${SECRET_FILES_STATIC[@]}"; do
+        [[ "$existing" == "$rel" ]] && { already=true; break; }
+    done
+    [[ "$already" == false ]] && SECRET_FILES+=("$rel")
+done < <(find "$CWD" -maxdepth 1 -name '.env*' -type f -print0 2>/dev/null)
 
 # Load secret patterns from data file
 PATTERNS_FILE="${DATA_DIR}/secret-patterns.json"
@@ -85,7 +108,7 @@ if [[ "$_patterns_loaded" == "true" ]]; then
     for rel_file in "${SECRET_FILES[@]}"; do
         abs_file="${CWD}/${rel_file}"
         if [[ -f "$abs_file" ]]; then
-            (( _scanned_files++ ))
+            _scanned_files=$(( _scanned_files + 1 ))
             matches=$(scan_file_for_secrets "$abs_file")
             if [[ -n "$matches" ]]; then
                 _files_with_secrets+=("$rel_file")
@@ -96,14 +119,18 @@ if [[ "$_patterns_loaded" == "true" ]]; then
                     pattern_name=$(echo "$match_line" | cut -d: -f4-)
                     log_warn "Secret detected in ${rel_file}:${local_line} — ${pattern_name} [${severity}]"
                     audit_log "WARN" "Secret in ${rel_file}:${local_line} | ${pattern_name} | ${severity}"
-                    (( _secret_issues++ ))
+                    _secret_issues=$(( _secret_issues + 1 ))
                 done <<< "$matches"
             fi
         fi
     done
 
     if (( _secret_issues == 0 )); then
-        log_pass "No secrets detected in project files"
+        if (( _scanned_files > 0 )); then
+            log_pass "No secrets detected in project files (${_scanned_files} files scanned)"
+        else
+            log_pass "No sensitive config files found in project root"
+        fi
     fi
 else
     log_info "Secret pattern file not found — secret scan skipped"
@@ -143,11 +170,19 @@ fi
 
 # ─── 2. npm dependency audit ──────────────────────────────────────────────────
 
-check_npm_deps "$CWD"
+if [[ ! -f "${CWD}/package-lock.json" ]]; then
+    log_info "npm: no package-lock.json found — skipping npm audit"
+else
+    check_npm_deps "$CWD"
+fi
 
 # ─── 3. pip dependency audit ──────────────────────────────────────────────────
 
-check_pip_deps "$CWD"
+if [[ ! -f "${CWD}/requirements.txt" ]]; then
+    log_info "pip: no requirements.txt found — skipping pip-audit"
+else
+    check_pip_deps "$CWD"
+fi
 
 # ─── 4. JetBrains plugin check ────────────────────────────────────────────────
 
@@ -159,10 +194,19 @@ check_jetbrains_plugins "$PLUGINS_FILE"
 EXTENSIONS_FILE="${DATA_DIR}/malicious-extensions.json"
 check_chrome_extensions "$EXTENSIONS_FILE"
 
+if (( _PASS_COUNT + _WARN_COUNT + _FAIL_COUNT == 0 )); then
+    # Safety net: if somehow nothing was logged, emit a neutral status
+    log_info "No checks produced output — environment may be minimal"
+fi
+
 # ─── 6. Git hook security check ───────────────────────────────────────────────
 
 _git_hooks_dir="${CWD}/.git/hooks"
-if [[ -d "$_git_hooks_dir" ]]; then
+if [[ ! -d "${CWD}/.git" ]]; then
+    log_info "git: not a git repository — skipping git hook check"
+elif [[ ! -d "$_git_hooks_dir" ]]; then
+    log_info "git: no .git/hooks directory — skipping git hook check"
+else
     _suspicious_hooks=()
 
     # Scan all hook scripts for curl/wget that download external scripts
@@ -170,7 +214,7 @@ if [[ -d "$_git_hooks_dir" ]]; then
         hook_name="$(basename "$hook_file")"
         # Skip sample files
         [[ "$hook_name" == *.sample ]] && continue
-        # Skip non-executable or non-text files
+        # Skip non-executable files
         [[ ! -x "$hook_file" ]] && continue
 
         # Look for external download patterns: curl | bash, wget | sh, etc.
@@ -182,7 +226,7 @@ if [[ -d "$_git_hooks_dir" ]]; then
     done < <(find "$_git_hooks_dir" -maxdepth 1 -type f -print0 2>/dev/null)
 
     if (( ${#_suspicious_hooks[@]} == 0 )); then
-        log_pass "Git hooks look clean"
+        log_pass "Git hooks look clean (no external download patterns)"
     else
         for suspicious in "${_suspicious_hooks[@]}"; do
             log_warn "Suspicious git hook — ${suspicious}"

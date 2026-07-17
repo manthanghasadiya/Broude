@@ -140,7 +140,8 @@ check_jetbrains_plugins() {
     mapfile -t plugin_dirs < <(_get_jetbrains_dirs)
 
     if (( ${#plugin_dirs[@]} == 0 )); then
-        return 0  # No JetBrains installed, skip silently
+        log_info "JetBrains: not installed — skipping plugin check"
+        return 0
     fi
 
     # Load malicious plugin IDs and names from JSON
@@ -172,9 +173,9 @@ check_jetbrains_plugins() {
                 log_fail "Malicious JetBrains plugin detected: \"${match_name}\" (ID: ${plugin_id})"
                 log_fail "  → Uninstall immediately via Settings → Plugins → Uninstall"
                 audit_log "FAIL" "Malicious JetBrains plugin: ${plugin_id} (${match_name})"
-                (( found_malicious++ ))
+                found_malicious=$(( found_malicious + 1 ))
             fi
-            (( found_any++ ))
+            found_any=$(( found_any + 1 ))
         done < <(find "$plugins_dir" -name "plugin.xml" -print0 2>/dev/null)
     done
 
@@ -217,7 +218,8 @@ check_chrome_extensions() {
     mapfile -t ext_base_dirs < <(_get_chrome_extension_dirs)
 
     if (( ${#ext_base_dirs[@]} == 0 )); then
-        return 0  # No Chrome installed, skip silently
+        log_info "Chrome: not installed — skipping extension check"
+        return 0
     fi
 
     local mal_count
@@ -243,7 +245,7 @@ check_chrome_extensions() {
             local ext_name
             ext_name=$(jq -r '.name // empty' "$manifest" 2>/dev/null | head -1)
 
-            (( found_any++ ))
+            found_any=$(( found_any + 1 ))
 
             # Match by extension ID first (most reliable)
             local match_by_id
@@ -254,7 +256,7 @@ check_chrome_extensions() {
                 log_fail "Malicious Chrome extension detected: \"${ext_name:-$ext_id}\" (ID: ${ext_id})"
                 log_fail "  → Remove at chrome://extensions"
                 audit_log "FAIL" "Malicious Chrome extension: ${ext_id} (${ext_name})"
-                (( found_malicious++ ))
+                found_malicious=$(( found_malicious + 1 ))
                 continue
             fi
 
@@ -268,7 +270,7 @@ check_chrome_extensions() {
                     log_fail "Malicious Chrome extension detected: \"${ext_name}\" (ID: ${ext_id})"
                     log_fail "  → Remove at chrome://extensions"
                     audit_log "FAIL" "Malicious Chrome extension (name match): ${ext_name} (${ext_id})"
-                    (( found_malicious++ ))
+                    found_malicious=$(( found_malicious + 1 ))
                 fi
             fi
         done < <(find "$ext_base" -name "manifest.json" -print0 2>/dev/null)

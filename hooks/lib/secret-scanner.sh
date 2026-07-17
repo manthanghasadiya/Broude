@@ -3,6 +3,14 @@
 # Source this file (do not execute directly).
 # Requires: common.sh sourced first, jq available.
 
+# Detect PCRE support once at source time.
+# grep -P is available on GNU grep (Linux) but NOT on macOS BSD grep.
+# We test with an actual PCRE-only construct to be sure.
+_BROUDE_PCRE_GREP=false
+if echo "test" | grep -qP '(?i)test' 2>/dev/null; then
+    _BROUDE_PCRE_GREP=true
+fi
+
 # ─── Pattern loading ──────────────────────────────────────────────────────────
 
 # Parallel arrays holding loaded patterns
@@ -43,22 +51,56 @@ load_secret_patterns() {
     return 0
 }
 
-# ─── Scanning helpers ─────────────────────────────────────────────────────────
+# _ere_safe_regex: convert a PCRE regex to a best-effort ERE regex.
+# Strips (?i) prefix (we use -i flag instead), converts (?:...) to (...),
+# and skips patterns with lookbehind/lookahead which ERE cannot express.
+# Returns 0 if the pattern can be used with grep -E, 1 if it must be skipped.
+_ere_safe_regex() {
+    local pcre="$1"
+    local out="$pcre"
+
+    # Patterns with lookbehind (?<=...) or lookahead (?=...) cannot be
+    # expressed in ERE — skip them to avoid false negatives being worse
+    # than false positives on these specific pattern types.
+    if echo "$pcre" | grep -qF '(?<=' 2>/dev/null || \
+       echo "$pcre" | grep -qF '(?=' 2>/dev/null; then
+        return 1  # signal: skip this pattern in ERE mode
+    fi
+
+    # Strip (?i) prefix — caller uses grep -i instead
+    out="${out#'(?i)'}"
+
+    # Convert non-capturing groups (?:...) to capturing groups (...)
+    # Simple sed pass; handles single-level nesting common in our patterns
+    out=$(echo "$out" | sed 's/(?:/(/g' 2>/dev/null)
+
+    echo "$out"
+    return 0
+}
 
 # _run_pattern_on_file: run a single grep pattern against a file.
-# Prints "filename:linenum:pattern_name" for each match.
+# Prints "file:linenum:severity:pattern_name" for each match.
 _run_pattern_on_file() {
     local file="$1"
     local pattern_name="$2"
     local regex="$3"
     local severity="$4"
 
-    # Use grep with perl-compatible regex where supported, fall back to extended
     local matches
-    if grep -qP "" /dev/null 2>/dev/null; then
-        matches=$(grep -nP "$regex" "$file" 2>/dev/null | head -5)
+
+    if [[ "$_BROUDE_PCRE_GREP" == true ]]; then
+        # Full PCRE support — use patterns as-is
+        matches=$(grep -nP -- "$regex" "$file" 2>/dev/null | head -5)
     else
-        matches=$(grep -nE "$regex" "$file" 2>/dev/null | head -5)
+        # No PCRE — attempt ERE conversion
+        local ere_regex
+        if ere_regex=$(_ere_safe_regex "$regex"); then
+            # Use -i for case-insensitive matching (covers stripped (?i))
+            matches=$(grep -niE -- "$ere_regex" "$file" 2>/dev/null | head -5)
+        else
+            # Pattern uses PCRE-only constructs; skip silently
+            return 0
+        fi
     fi
 
     if [[ -n "$matches" ]]; then

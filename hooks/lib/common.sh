@@ -78,19 +78,19 @@ get_json_field() {
 log_pass() {
     local msg="$*"
     echo -e "${GREEN}[PASS]${NC} ${msg}"
-    (( _PASS_COUNT++ ))
+    _PASS_COUNT=$(( _PASS_COUNT + 1 ))
 }
 
 log_warn() {
     local msg="$*"
     echo -e "${YELLOW}[WARN]${NC} ${msg}"
-    (( _WARN_COUNT++ ))
+    _WARN_COUNT=$(( _WARN_COUNT + 1 ))
 }
 
 log_fail() {
     local msg="$*"
     echo -e "${RED}[FAIL]${NC} ${msg}"
-    (( _FAIL_COUNT++ ))
+    _FAIL_COUNT=$(( _FAIL_COUNT + 1 ))
 }
 
 log_info() {
