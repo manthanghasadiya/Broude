@@ -35,7 +35,7 @@ header()  { echo -e "\n${BOLD}$*${NC}"; }
 
 # ─── Step 1: Copy broude to ~/.broude ────────────────────────────────────────
 
-header "=== Installing Broude v1.0.0 ==="
+header "=== Installing Broude v1.1.0 ==="
 echo ""
 
 info "Installing to ${BROUDE_HOME}..."
@@ -114,19 +114,15 @@ else
     # Existing settings — merge carefully
     info "Merging into existing ${CLAUDE_SETTINGS}..."
 
-    # Check if broude hook is already registered
+    # ── SessionStart hook ───────────────────────────────────────────────────
     if jq -e --arg cmd "${BROUDE_HOME}/hooks/session-audit.sh" \
         '.hooks.SessionStart[]?.hooks[]? | select(.command == $cmd)' \
         "$CLAUDE_SETTINGS" &>/dev/null; then
-        ok "Broude hook already registered in Claude Code settings"
+        ok "Broude SessionStart hook already registered in Claude Code settings"
     else
-        # Merge: add broude to SessionStart hooks array
-        # We preserve all existing hooks and add ours as a new entry
         local_tmp=$(mktemp)
         jq --arg cmd "${BROUDE_HOME}/hooks/session-audit.sh" '
-          # Ensure hooks.SessionStart exists
           .hooks.SessionStart //= [] |
-          # Add broude as a new hook group at the end
           .hooks.SessionStart += [
             {
               "hooks": [
@@ -142,13 +138,43 @@ else
 
         if [[ $? -eq 0 ]]; then
             cp "$local_tmp" "$CLAUDE_SETTINGS"
-            ok "Broude hooks merged into ${CLAUDE_SETTINGS}"
+            ok "SessionStart hook merged into ${CLAUDE_SETTINGS}"
         else
-            err "Failed to merge into ${CLAUDE_SETTINGS} — your existing settings were NOT modified."
-            err "Manually add the following to your settings.json:"
-            echo ""
-            cat "${INSTALL_SOURCE}/settings.json"
-            echo ""
+            err "Failed to merge SessionStart hook — existing settings NOT modified."
+            err "Manually add SessionStart config from: ${INSTALL_SOURCE}/settings.json"
+        fi
+        rm -f "$local_tmp"
+    fi
+
+    # ── PreToolUse hook (Bash) ───────────────────────────────────────────────
+    if jq -e --arg cmd "${BROUDE_HOME}/hooks/pre-bash-check.sh" \
+        '.hooks.PreToolUse[]?.hooks[]? | select(.command == $cmd)' \
+        "$CLAUDE_SETTINGS" &>/dev/null; then
+        ok "Broude PreToolUse hook already registered in Claude Code settings"
+    else
+        local_tmp=$(mktemp)
+        jq --arg cmd "${BROUDE_HOME}/hooks/pre-bash-check.sh" '
+          .hooks.PreToolUse //= [] |
+          .hooks.PreToolUse += [
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": $cmd,
+                  "timeout": 10
+                }
+              ]
+            }
+          ]
+        ' "$CLAUDE_SETTINGS" > "$local_tmp"
+
+        if [[ $? -eq 0 ]]; then
+            cp "$local_tmp" "$CLAUDE_SETTINGS"
+            ok "PreToolUse hook merged into ${CLAUDE_SETTINGS}"
+        else
+            err "Failed to merge PreToolUse hook — existing settings NOT modified."
+            err "Manually add PreToolUse config from: ${INSTALL_SOURCE}/settings.json"
         fi
         rm -f "$local_tmp"
     fi
@@ -179,8 +205,9 @@ fi
 
 header "=== Installation Complete ==="
 echo ""
-echo "  Broude is now active. The next time you start a Claude Code session,"
-echo "  you'll see a security audit report at the top of the conversation."
+echo "  Broude is now active with two layers of protection:"
+echo "  • SessionStart audit: security report on every session start"
+echo "  • PreToolUse blocking: real-time interception of dangerous bash commands"
 echo ""
 echo "  To uninstall:  bash ~/.broude/uninstall.sh"
 echo ""
