@@ -1,15 +1,12 @@
 # Broude
 
-One-line description: Your AI coding assistant's security watchdog.
+Your AI coding assistant's security watchdog.
 
-## Logo placeholder
-<!-- TODO: Add logo -->
-[Leave a centered placeholder comment for the logo, we'll design it later]
+<!-- Logo coming soon -->
 
-## Badges
-- CI status badge (GitHub Actions)
-- License badge (MIT)
-- Bash version badge (4.0+)
+[![CI](https://github.com/manthanghasadiya/Broude/actions/workflows/ci.yml/badge.svg)](https://github.com/manthanghasadiya/Broude/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Bash 4.0+](https://img.shields.io/badge/bash-4.0%2B-green)
 
 ## What is Broude?
 Broude is a set of Claude Code hooks that catch supply chain attacks, exposed secrets, and obfuscated bash commands before they hit your terminal. Think of it as a signature-based security layer that sits between your AI coding assistant and your shell.
@@ -23,9 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/manthanghasadiya/Broude/main/instal
 ```
 
 ## What it checks
-- Session audit: secrets, npm/pip deps, JetBrains plugins, Chrome extensions, git hooks
-- [Coming soon] Pre-execution: malicious package installs, pipe-to-shell, GuardFall obfuscation
-- [Coming soon] Post-execution: secret scanning in written files, audit trail
+Broude performs a comprehensive session audit, checking for exposed secrets, npm/pip dependencies, malicious JetBrains plugins, suspicious Chrome extensions, and git hooks. Coming soon, it will also provide pre-execution blocking (against malicious package installs, pipe-to-shell patterns, and GuardFall obfuscation) and post-execution scanning (for secret detection in written files and maintenance of an audit trail).
 
 ## Example Output
 ```text
