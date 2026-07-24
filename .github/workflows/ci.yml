@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Make scripts executable
+        run: |
+          chmod +x hooks/*.sh hooks/lib/*.sh tests/*.sh install.sh uninstall.sh
+
+      - name: Run test suite
+        run: bash tests/test-session-audit.sh
+
+      - name: Shellcheck
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck hooks/*.sh hooks/lib/*.sh --severity=warning || true
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate JSON data files
+        run: |
+          for f in data/*.json; do
+            echo "Validating $f..."
+            jq empty "$f" || exit 1
+          done
+          echo "All JSON files valid."

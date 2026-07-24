@@ -1,64 +1,72 @@
 # Broude
 
-**Broude** (bro + Claude) is a security layer for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that hooks into its lifecycle events to run automated security checks at session start.
+One-line description: Your AI coding assistant's security watchdog.
 
-Every time you open a Claude Code session, Broude audits your project and developer environment for common security issues — exposed secrets, vulnerable dependencies, and malicious IDE extensions — and injects a concise security report directly into Claude's context.
+## Logo placeholder
+<!-- TODO: Add logo -->
+[Leave a centered placeholder comment for the logo, we'll design it later]
 
-## Install
+## Badges
+- CI status badge (GitHub Actions)
+- License badge (MIT)
+- Bash version badge (4.0+)
 
+## What is Broude?
+Broude is a set of Claude Code hooks that catch supply chain attacks, exposed secrets, and obfuscated bash commands before they hit your terminal. Think of it as a signature-based security layer that sits between your AI coding assistant and your shell.
+
+## Why?
+Supply chain attacks on developers have surged in recent years. In June 2026, malicious JetBrains plugins, rogue Chrome extensions, and compromised npm packages like Mastra were specifically crafted to steal developer credentials and disrupt AI agents. Broude protects you by auditing your environment during AI sessions.
+
+## Quick Start
 ```bash
-git clone https://github.com/your-org/broude ~/.broude-src
-bash ~/.broude-src/install.sh
+curl -fsSL https://raw.githubusercontent.com/manthanghasadiya/Broude/main/install.sh | bash
 ```
 
-Requires: **bash**, **jq** (`brew install jq` / `apt install jq`)
-
-## What Happens at Session Start
-
-When you open Claude Code, Broude automatically:
-
-1. **Scans for exposed secrets** — checks `.env`, `config.json`, `settings.py`, and other common files for API keys, tokens, and credentials using 20 well-known regex patterns
-2. **Checks `.gitignore` coverage** — warns if `.env` files could accidentally be committed
-3. **Audits npm dependencies** — delegates to `npm audit` and surfaces critical/high vulnerabilities
-4. **Audits Python dependencies** — delegates to `pip-audit` if installed
-5. **Checks JetBrains plugins** — cross-references installed plugins against 15 known malicious plugins (Aikido Security, June 2026)
-6. **Checks Chrome extensions** — cross-references installed extensions against the PromptSnatcher campaign list (MalExt Sentry, June 2026)
-7. **Inspects git hooks** — warns if any `.git/hooks/` scripts download and execute external code
+## What it checks
+- Session audit: secrets, npm/pip deps, JetBrains plugins, Chrome extensions, git hooks
+- [Coming soon] Pre-execution: malicious package installs, pipe-to-shell, GuardFall obfuscation
+- [Coming soon] Post-execution: secret scanning in written files, audit trail
 
 ## Example Output
-
-```
+```text
 === BROUDE v1.0.0: Session Security Audit ===
 
-Project: /home/user/my-project
+Project: /path/to/project
 
-[PASS] No secrets detected in project files
-[WARN] .env file exists but is NOT in .gitignore — add '.env' to .gitignore
-[PASS] npm audit: 0 vulnerabilities
-[PASS] No malicious JetBrains plugins detected (12 plugins checked)
-[WARN] Malicious Chrome extension detected: "Smart Adblocker Pro" (ID: jdoanlopeandhcclcgkijenjkghlooio)
-       → Remove at chrome://extensions
+[PASS] No secrets detected in project files (10 files scanned)
+[PASS] .env is in .gitignore
+[PASS] npm audit: no vulnerabilities found
+[INFO] pip-audit skipped (no requirements.txt)
+[PASS] JetBrains plugins look clean
+[WARN] Found extensions matching known threats (PromptSnatcher variants): 'Chrome extension 1'
 
-Risk: MEDIUM (3 PASS, 2 WARN, 0 FAIL)
+Risk: MEDIUM (4 PASS, 1 WARN, 0 FAIL)
 Action: Address WARN items before committing.
 ==========================================
 ```
 
-Claude reads this report and adjusts its behavior accordingly — it will remind you to fix issues, refuse to commit secret files, and flag risky patterns.
+## Requirements
+- bash 4.0+
+- jq
+- Claude Code
+- Optional: npm (for dependency audit), pip-audit (for Python audit)
 
-## Design Principles
+## Configuration
+Customize Broude via `~/.broude/settings.json` (or project-local configuration) to bypass certain checks, add custom secret patterns, or toggle specific rules.
 
-- **Pure bash + jq** — no Python, Node, or Docker. Works anywhere Claude Code runs.
-- **No network calls in hooks** — all checks are local. The 10-second hook timeout is respected.
-- **Never blocks session start** — always exits 0. Informational only.
-- **Lean data files** — Broude doesn't maintain a malicious packages database. It delegates to `npm audit` and `pip-audit` for that. It only maintains small, stable, manually curated lists (secrets, obfuscation patterns, JetBrains plugins, Chrome extensions).
+## Roadmap
+- [v1.0](https://github.com/manthanghasadiya/Broude/issues/1): Session audit (current)
+- [v1.1](https://github.com/manthanghasadiya/Broude/issues/2): Pre-execution blocking
+- [v1.2](https://github.com/manthanghasadiya/Broude/issues/3): Post-execution scanning
+- [v1.3](https://github.com/manthanghasadiya/Broude/issues/4): MCP server integration (mcpsec)
+- [v1.4](https://github.com/manthanghasadiya/Broude/issues/5): AI-powered analysis
 
-## Uninstall
+## Contributing
+See CONTRIBUTING.md
 
-```bash
-bash ~/.broude/uninstall.sh
-```
+## Author
+Manthan Ghasadiya (@manthanghasadiya)
+Built by the creator of mcpsec and 3 published CVEs in MCP servers.
 
 ## License
-
-MIT — see [LICENSE](LICENSE)
+MIT
