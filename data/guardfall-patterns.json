@@ -81,7 +81,7 @@
         {
           "id": "gf-b5",
           "name": "Tr-based Command Decoding",
-          "regex": "tr\\s+['\"][a-zA-Z0-9+/=]+['\"]\\s+['\"][a-zA-Z0-9+/=]+['\"]\\s*<<<",
+          "regex": "tr\\s+['\"][a-zA-Z0-9+/=-]+['\"]\\s+['\"][a-zA-Z0-9+/=-]+['\"]\\s*<<<",
           "severity": "high",
           "example": "tr 'a-z' 'n-za-m' <<<'phey' → curl (ROT13)"
         }

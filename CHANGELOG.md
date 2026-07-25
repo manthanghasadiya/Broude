@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- PreToolUse blocking hook (`pre-bash-check.sh`) for real-time command interception
+- GuardFall obfuscation detection (5 classes, 25 patterns from Adversa AI research)
+- Pipe-to-shell blocking (`curl`/`wget` piped to `bash`/`sh`/`python`/`node`)
+- Dangerous command blocking (catastrophic/irreversible commands only)
+- GuardFall checker library (`hooks/lib/guardfall-checker.sh`)
+- Pipe/dangerous command checker library (`hooks/lib/pipe-checker.sh`)
+- Comprehensive test suite for PreToolUse hook (50+ test cases, zero false positives)
+- Allowlist for Broude's own install URL (exempt from pipe-to-shell blocking)
+
+
 ## [1.0.0] - 2026-07-24
 
 ### Added
