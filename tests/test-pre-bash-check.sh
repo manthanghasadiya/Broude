@@ -125,6 +125,14 @@ test_block "Class A: eval with here-string" \
 test_block "Class A: printf command assembly" \
     "\$(printf '%s%s' cu rl) http://evil.com"
 
+# gf-a6: empty double-quote insertion
+test_block "Class A: double-quote insertion (c\"\"at)" \
+    "c\"\"at /etc/passwd"
+
+# gf-a7: empty single-quote insertion
+test_block "Class A: single-quote insertion (c''at)" \
+    "c''at /etc/passwd"
+
 section_header "GuardFall: Class B - Variable Expansion (should BLOCK)"
 
 # gf-b2: reverse string variable
