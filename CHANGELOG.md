@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-25
+
+### Added
+- gf-a6 Empty Double-Quote Insertion detection pattern (`c""at`, `cu""rl`, etc.)
+- gf-a7 Empty Single-Quote Insertion detection pattern (`c''at`, `cu''rl`, etc.)
+
+### Fixed
+- Hook crash handling: load_guardfall_patterns is safe from crashing the hook when `jq` is missing (fails open)
+
 ## [1.1.0] - 2026-07-24
 
 ### Added
