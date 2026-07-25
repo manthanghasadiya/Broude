@@ -25,8 +25,8 @@ _GF_PATTERNS_LOADED=false
 
 # Detect grep capability once at source time
 _GF_GREP_CMD="grep -E"
-if echo "" | grep -P "" 2>/dev/null; then
-    _GF_GREP_CMD="grep -P"
+if echo "" | LC_ALL=C.UTF-8 grep -P "" 2>/dev/null; then
+    _GF_GREP_CMD="LC_ALL=C.UTF-8 grep -P"
 fi
 
 # ─── load_guardfall_patterns ─────────────────────────────────────────────────
@@ -58,29 +58,59 @@ load_guardfall_patterns() {
         return 1
     fi
 
-    # Extract all patterns flat using jq — one line per field, tab-separated
-    # Format: class_id\tclass_name\tpattern_id\tpattern_name\tregex\tseverity
+    # Extract all patterns using a line-prefix format instead of @tsv.
+    # @tsv doubles backslashes (\s → \\s), which breaks grep patterns.
+    # This approach uses jq -r string concat which preserves backslashes as-is.
     local raw_patterns
     raw_patterns=$(jq -r '
         .classes[] as $class |
         $class.patterns[] |
-        [$class.id, $class.name, .id, .name, .regex, .severity] |
-        @tsv
-    ' "$patterns_file" 2>/dev/null) || return 1
+        "CLASS:" + $class.id + "|" + $class.name + "\n" +
+        "PAT:"   + .id + "|" + .name + "\n" +
+        "REGEX:" + .regex + "\n" +
+        "SEV:"   + .severity + "\n" +
+        "END"
+    ' "$patterns_file" 2>/dev/null | tr -d '\r') || return 1
 
     if [[ -z "$raw_patterns" ]]; then
         return 1
     fi
 
-    # Parse into arrays
-    while IFS=$'\t' read -r class_id class_name pat_id pat_name regex severity; do
-        [[ -z "$regex" ]] && continue
-        _GF_CLASS_IDS+=("$class_id")
-        _GF_CLASS_NAMES+=("$class_name")
-        _GF_IDS+=("$pat_id")
-        _GF_NAMES+=("$pat_name")
-        _GF_REGEXES+=("$regex")
-        _GF_SEVERITIES+=("$severity")
+    # Parse line-by-line — backslashes in REGEX lines are preserved intact
+    local cur_class_id="" cur_class_name="" cur_pat_id="" cur_pat_name=""
+    local cur_regex="" cur_sev="" rest=""
+
+    while IFS= read -r line; do
+        case "$line" in
+            CLASS:*)
+                rest="${line#CLASS:}"
+                cur_class_id="${rest%%|*}"
+                cur_class_name="${rest#*|}"
+                ;;
+            PAT:*)
+                rest="${line#PAT:}"
+                cur_pat_id="${rest%%|*}"
+                cur_pat_name="${rest#*|}"
+                ;;
+            REGEX:*)
+                cur_regex="${line#REGEX:}"
+                ;;
+            SEV:*)
+                cur_sev="${line#SEV:}"
+                ;;
+            END)
+                if [[ -n "$cur_regex" ]]; then
+                    _GF_CLASS_IDS+=("$cur_class_id")
+                    _GF_CLASS_NAMES+=("$cur_class_name")
+                    _GF_IDS+=("$cur_pat_id")
+                    _GF_NAMES+=("$cur_pat_name")
+                    _GF_REGEXES+=("$cur_regex")
+                    _GF_SEVERITIES+=("$cur_sev")
+                fi
+                cur_class_id="" cur_class_name="" cur_pat_id=""
+                cur_pat_name="" cur_regex="" cur_sev=""
+                ;;
+        esac
     done <<< "$raw_patterns"
 
     if [[ ${#_GF_REGEXES[@]} -gt 0 ]]; then
@@ -120,8 +150,8 @@ check_guardfall() {
 
         # Try PCRE first, fall back to ERE
         local matched=false
-        if [[ "$_GF_GREP_CMD" == "grep -P" ]]; then
-            if echo "$cmd" | grep -qP "$regex" 2>/dev/null; then
+        if [[ "$_GF_GREP_CMD" == *"grep -P" ]]; then
+            if echo "$cmd" | LC_ALL=C.UTF-8 grep -qP "$regex" 2>/dev/null; then
                 matched=true
             elif echo "$cmd" | grep -qE "$regex" 2>/dev/null; then
                 matched=true

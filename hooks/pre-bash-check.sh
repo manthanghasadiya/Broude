@@ -76,22 +76,36 @@ _block() {
 # Slurp all stdin before anything else
 _RAW_STDIN="$(cat)"
 
-# Require jq for JSON parsing — fail open if missing
-if ! command -v jq &>/dev/null; then
-    audit_log "WARN" "pre-bash-check: jq not installed, skipping all checks"
-    exit 0
+_JQ_OK=false
+if command -v jq &>/dev/null; then
+    _JQ_OK=true
 fi
 
-# Validate JSON
-if ! echo "$_RAW_STDIN" | jq empty 2>/dev/null; then
-    audit_log "WARN" "pre-bash-check: invalid JSON on stdin, skipping checks"
-    exit 0
-fi
+# Extract fields — try jq first, fall back to grep for basic extraction
+_TOOL_NAME=""
+_COMMAND=""
+_SESSION_ID=""
 
-# Extract tool name and command
-_TOOL_NAME=$(echo "$_RAW_STDIN" | jq -r '.tool_name // empty' 2>/dev/null)
-_COMMAND=$(echo "$_RAW_STDIN" | jq -r '.tool_input.command // empty' 2>/dev/null)
-_SESSION_ID=$(echo "$_RAW_STDIN" | jq -r '.session_id // empty' 2>/dev/null)
+if [[ "$_JQ_OK" == "true" ]]; then
+    # Validate JSON first
+    if ! echo "$_RAW_STDIN" | jq empty 2>/dev/null; then
+        audit_log "WARN" "pre-bash-check: invalid JSON on stdin, skipping checks"
+        exit 0
+    fi
+    _TOOL_NAME=$(echo "$_RAW_STDIN" | jq -r '.tool_name // empty' 2>/dev/null)
+    _COMMAND=$(echo "$_RAW_STDIN" | jq -r '.tool_input.command // empty' 2>/dev/null)
+    _SESSION_ID=$(echo "$_RAW_STDIN" | jq -r '.session_id // empty' 2>/dev/null)
+else
+    # grep-based fallback — handles simple (non-nested-quote) commands
+    # Sufficient for extracting the command from a well-formed PreToolUse payload
+    _TOOL_NAME=$(echo "$_RAW_STDIN" | grep -o '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | head -1 | sed 's/.*:[[:space:]]*"\(.*\)"/\1/' 2>/dev/null || true)
+    _COMMAND=$(echo "$_RAW_STDIN" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | head -1 | sed 's/.*:[[:space:]]*"\(.*\)"/\1/' 2>/dev/null || true)
+    _SESSION_ID=$(echo "$_RAW_STDIN" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | head -1 | sed 's/.*:[[:space:]]*"\(.*\)"/\1/' 2>/dev/null || true)
+    # Note: grep fallback will miss commands with escaped quotes — those pass through safely
+fi
 
 # Only act on Bash tool calls — pass through everything else silently
 if [[ "$_TOOL_NAME" != "Bash" ]]; then
@@ -107,6 +121,12 @@ fi
 
 # Comment-only command — skip
 if [[ "$_CMD_TRIMMED" == \#* ]]; then
+    exit 0
+fi
+
+# Allowlist check — if command is trusted (e.g. Broude installation), skip all checks
+if _is_allowlisted "$_COMMAND"; then
+    audit_log "ALLOW" "pre-bash-check: command is allowlisted | session=${_SESSION_ID} | cmd=$(_truncate "$_COMMAND" 200)"
     exit 0
 fi
 

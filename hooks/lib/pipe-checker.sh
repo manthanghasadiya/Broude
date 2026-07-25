@@ -117,7 +117,7 @@ check_dangerous_command() {
     # ── rm -rf of root-level paths ────────────────────────────────────────────
     # rm -rf / OR rm -rf /* — wipes the entire filesystem
     if echo "$cmd" | grep -qE \
-        'rm\s+(-[a-zA-Z]*f[a-zA-Z]*r|-[a-zA-Z]*r[a-zA-Z]*f)\s+(/\*?|/\s*$)' \
+        'rm[[:space:]]+(-(r[a-zA-Z]*f|f[a-zA-Z]*r))[[:space:]]+/\*?([[:space:]]|$)' \
         2>/dev/null; then
         echo "rm -rf of root filesystem (/)  — would destroy the OS"
         return 0
