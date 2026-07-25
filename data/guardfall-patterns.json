@@ -42,6 +42,20 @@
           "regex": "\\$\\(printf\\s+['\"][%s]+['\"]\\s+[a-zA-Z]{2,4}\\s+[a-zA-Z]{2,4}",
           "severity": "high",
           "example": "$(printf '%s%s' cu rl)"
+        },
+        {
+          "id": "gf-a6",
+          "name": "Empty Double-Quote Insertion",
+          "regex": "[a-zA-Z]\"\"[a-zA-Z]",
+          "severity": "high",
+          "example": "c\"\"at /etc/passwd or cu\"\"rl"
+        },
+        {
+          "id": "gf-a7",
+          "name": "Empty Single-Quote Insertion",
+          "regex": "[a-zA-Z]''[a-zA-Z]",
+          "severity": "high",
+          "example": "c''at /etc/passwd or cu''rl"
         }
       ]
     },

@@ -131,7 +131,7 @@ if _is_allowlisted "$_COMMAND"; then
 fi
 
 # ─── Load GuardFall patterns (cached in memory for this process) ──────────────
-load_guardfall_patterns "$GUARDFALL_PATTERNS"
+load_guardfall_patterns "$GUARDFALL_PATTERNS" || true
 # If patterns fail to load, GuardFall check will be a no-op (fail open)
 
 # ─── Check 1: GuardFall Obfuscation ──────────────────────────────────────────
