@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-24
+
 ### Added
 - PreToolUse blocking hook (`pre-bash-check.sh`) for real-time command interception
 - GuardFall obfuscation detection (5 classes, 25 patterns from Adversa AI research)
