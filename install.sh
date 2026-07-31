@@ -13,7 +13,6 @@
 #   5. Runs a smoke-test of session-audit.sh
 #   6. Prints a success summary
 
-set -euo pipefail
 
 BROUDE_HOME="${HOME}/.broude"
 CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
@@ -35,7 +34,8 @@ header()  { echo -e "\n${BOLD}$*${NC}"; }
 
 # ─── Step 1: Copy broude to ~/.broude ────────────────────────────────────────
 
-header "=== Installing Broude v1.1.0 ==="
+source "${INSTALL_SOURCE}/hooks/lib/common.sh"
+header "=== Installing Broude v${BROUDE_VERSION} ==="
 echo ""
 
 info "Installing to ${BROUDE_HOME}..."
