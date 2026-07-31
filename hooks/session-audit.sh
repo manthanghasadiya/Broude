@@ -104,7 +104,7 @@ SECRET_FILES_STATIC=(
 # Dynamically add any .env* files found in CWD that aren't already in the list
 SECRET_FILES=("${SECRET_FILES_STATIC[@]}")
 while IFS= read -r -d '' found_env; do
-    rel="${found_env#${CWD}/}"
+    rel="${found_env#"${CWD}"/}"
     # Only add if not already in the static list
     already=false
     for existing in "${SECRET_FILES_STATIC[@]}"; do

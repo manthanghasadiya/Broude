@@ -2,7 +2,7 @@
 # broude/hooks/lib/common.sh - shared utilities for all Broude hooks
 # Source this at the top of every hook script.
 
-BROUDE_VERSION="1.0.0"
+BROUDE_VERSION="1.1.1"
 BROUDE_DIR="${HOME}/.broude"
 BROUDE_LOG="${BROUDE_DIR}/audit.log"
 
@@ -114,7 +114,6 @@ print_header() {
 
 # print_footer: print summary line with risk level based on counts.
 print_footer() {
-    local total=$(( _PASS_COUNT + _WARN_COUNT + _FAIL_COUNT ))
 
     # Determine risk level
     local risk
