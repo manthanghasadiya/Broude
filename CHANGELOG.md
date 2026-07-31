@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- BROUDE_VERSION stuck at 1.0.0, now correctly shows current version
+- install.sh reads version dynamically from common.sh
+- GitHub Actions pinned to SHA hashes (supply chain hardening)
+- Phase 2 test suite now runs in CI
+- Shellcheck warnings resolved (unused variable, unquoted expansion)
+- Removed set -euo pipefail from install.sh for robustness
+
 ## [1.1.1] - 2026-07-25
 
 ### Added
