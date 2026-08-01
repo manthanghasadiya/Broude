@@ -20,11 +20,11 @@ curl -fsSL https://raw.githubusercontent.com/manthanghasadiya/Broude/main/instal
 ```
 
 ## What it checks
-Broude performs a comprehensive session audit, checking for exposed secrets, npm/pip dependencies, malicious JetBrains plugins, suspicious Chrome extensions, and git hooks. Coming soon, it will also provide pre-execution blocking (against malicious package installs, pipe-to-shell patterns, and GuardFall obfuscation) and post-execution scanning (for secret detection in written files and maintenance of an audit trail).
+Broude performs a comprehensive session audit (checking for exposed secrets, npm/pip dependencies, malicious JetBrains plugins, suspicious Chrome extensions, and git hooks) and pre-execution command blocking (catching GuardFall obfuscation, pipe-to-shell patterns, and dangerous commands before execution). Post-execution scanning (for secret detection in written files and audit logging) is coming soon.
 
 ## Example Output
 ```text
-=== BROUDE v1.0.0: Session Security Audit ===
+=== BROUDE v1.1.1: Session Security Audit ===
 
 Project: /path/to/project
 
@@ -47,21 +47,21 @@ Action: Address WARN items before committing.
 - Optional: npm (for dependency audit), pip-audit (for Python audit)
 
 ## Configuration
-Customize Broude via `~/.broude/settings.json` (or project-local configuration) to bypass certain checks, add custom secret patterns, or toggle specific rules.
+Broude hooks are configured in ~/.claude/settings.json. A dedicated Broude configuration file for customizing checks is planned for a future release.
 
 ## Roadmap
-- [v1.0](https://github.com/manthanghasadiya/Broude/issues/1): Session audit (current)
-- [v1.1](https://github.com/manthanghasadiya/Broude/issues/2): Pre-execution blocking
-- [v1.2](https://github.com/manthanghasadiya/Broude/issues/3): Post-execution scanning
-- [v1.3](https://github.com/manthanghasadiya/Broude/issues/4): MCP server integration (mcpsec)
+- [v1.0](https://github.com/manthanghasadiya/Broude/issues/1): Session audit ✅
+- [v1.1](https://github.com/manthanghasadiya/Broude/issues/2): Pre-execution blocking ✅
+- [v1.2](https://github.com/manthanghasadiya/Broude/issues/3): Post-execution scanning (next)
+- [v1.3](https://github.com/manthanghasadiya/Broude/issues/4): MCP server integration
 - [v1.4](https://github.com/manthanghasadiya/Broude/issues/5): AI-powered analysis
 
 ## Contributing
-See CONTRIBUTING.md
+Contributions welcome! Open an issue to discuss before submitting PRs.
 
 ## Author
 Manthan Ghasadiya (@manthanghasadiya)
-Built by the creator of mcpsec and 3 published CVEs in MCP servers.
+Built by the creator of mcpsec and 4 published CVEs in MCP servers.
 
 ## License
 MIT
