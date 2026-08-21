@@ -1,6 +1,13 @@
 # Broude runtime state directory (created by install.sh)
 .broude-installed
 
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 # Temporary test artifacts
 /tmp/broude-test-*
 
@@ -14,3 +21,5 @@
 
 # Audit logs (stored in ~/.broude/, not in repo)
 *.log
+coverage/
+.coverage

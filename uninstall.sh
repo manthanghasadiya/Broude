@@ -5,15 +5,15 @@
 
 set -euo pipefail
 
-BROUDE_HOME="${HOME}/.broude"
-CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+BROUDE_HOME="${BROUDE_INSTALL_DIR:-${HOME}/.broude}"
+CLAUDE_SETTINGS="${CLAUDE_SETTINGS_FILE:-${HOME}/.claude/settings.json}"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
-    RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+    GREEN='\033[0;32m'; YELLOW='\033[1;33m'
     CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 else
-    RED=''; GREEN=''; YELLOW=''; CYAN=''; BOLD=''; NC=''
+    GREEN=''; YELLOW=''; CYAN=''; BOLD=''; NC=''
 fi
 
 info()  { echo -e "${CYAN}[INFO]${NC}  $*"; }
@@ -31,7 +31,7 @@ if [[ -d "$BROUDE_HOME" ]]; then
     rm -rf "$BROUDE_HOME"
     ok "Removed ${BROUDE_HOME}"
 else
-    info "~/.broude not found — skipping"
+    info "${BROUDE_HOME} not found — skipping"
 fi
 
 # ─── Step 2: Remove broude hooks from Claude settings ────────────────────────
@@ -48,20 +48,25 @@ else
     else
         local_tmp=$(mktemp)
 
-        # Remove hook entries that reference ~/.broude from SessionStart
-        # Strategy: filter out any hook objects whose command contains ".broude/"
-        jq '
-          if .hooks.SessionStart then
-            .hooks.SessionStart |= map(
+        # Remove only hook commands installed from this Broude directory.
+        jq --arg prefix "${BROUDE_HOME}/" '
+          def remove_broude_hooks:
+            map(
               .hooks |= map(
-                select(.command | (. == null) or (contains(".broude/") | not))
-              ) |
-              select(length > 0)
-            ) |
-            if (.hooks.SessionStart | length) == 0 then
-              del(.hooks.SessionStart)
-            else . end
+                select((.command // "") | startswith($prefix) | not)
+              )
+              | select((.hooks | length) > 0)
+            );
+
+          if .hooks.SessionStart then
+            .hooks.SessionStart |= remove_broude_hooks
+            | if (.hooks.SessionStart | length) == 0 then del(.hooks.SessionStart) else . end
           else . end
+          | if .hooks.PreToolUse then
+              .hooks.PreToolUse |= remove_broude_hooks
+              | if (.hooks.PreToolUse | length) == 0 then del(.hooks.PreToolUse) else . end
+            else . end
+          | if ((.hooks // {}) | length) == 0 then del(.hooks) else . end
         ' "$CLAUDE_SETTINGS" > "$local_tmp"
 
         if [[ $? -eq 0 ]]; then

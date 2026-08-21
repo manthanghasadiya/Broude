@@ -24,9 +24,9 @@ FIXTURES_DIR="${SCRIPT_DIR}/fixtures"
 # Colors
 if [[ -t 1 ]]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-    CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
+    BOLD='\033[1m'; NC='\033[0m'
 else
-    RED=''; GREEN=''; YELLOW=''; CYAN=''; BOLD=''; NC=''
+    RED=''; GREEN=''; YELLOW=''; BOLD=''; NC=''
 fi
 
 # Counters — use $(( )) assignment form, never (( var++ )) standalone:
@@ -35,6 +35,11 @@ PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
 TEMP_DIRS=()
+
+# Keep test state out of the developer's real ~/.broude directory.
+BROUDE_TEST_STATE=$(mktemp -d /tmp/broude-state-test-XXXXXX)
+TEMP_DIRS+=("$BROUDE_TEST_STATE")
+export BROUDE_STATE_DIR="$BROUDE_TEST_STATE"
 
 # Whether jq is available in this environment
 JQ_AVAILABLE=false
@@ -376,14 +381,14 @@ else
     skip "fixture file not found at ${fixture_json}"
 fi
 
-# ─── Test 14: Audit log written to ~/.broude/audit.log ───────────────────────
+# ─── Test 14: Audit log written to the configured state directory ───────────
 
 echo ""
 echo -e "${BOLD}Test 14: Audit log — hook writes to ~/.broude/audit.log${NC}"
 
 if skip_if_no_jq "audit log (requires jq to reach log-writing code)"; then
     log_project=$(make_temp_project)
-    log_file="${HOME}/.broude/audit.log"
+    log_file="${BROUDE_STATE_DIR}/audit.log"
     lines_before=0
     if [[ -f "$log_file" ]]; then
         lines_before=$(wc -l < "$log_file")

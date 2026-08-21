@@ -59,7 +59,7 @@ _block() {
     truncated="$(_truncate "$full_cmd" 120)"
 
     # Log to audit file
-    audit_log "BLOCK" "${reason} | cmd: ${full_cmd}"
+    audit_log "BLOCK" "pre-bash-check: ${reason} | session=${_SESSION_ID}"
 
     # Stderr message goes to Claude (exit code 2 routes stderr to the model)
     echo "[BROUDE BLOCK] ${reason} | Command: ${truncated}" >&2
@@ -124,12 +124,6 @@ if [[ "$_CMD_TRIMMED" == \#* ]]; then
     exit 0
 fi
 
-# Allowlist check — if command is trusted (e.g. Broude installation), skip all checks
-if _is_allowlisted "$_COMMAND"; then
-    audit_log "ALLOW" "pre-bash-check: command is allowlisted | session=${_SESSION_ID} | cmd=$(_truncate "$_COMMAND" 200)"
-    exit 0
-fi
-
 # ─── Load GuardFall patterns (cached in memory for this process) ──────────────
 load_guardfall_patterns "$GUARDFALL_PATTERNS" || true
 # If patterns fail to load, GuardFall check will be a no-op (fail open)
@@ -171,5 +165,5 @@ if [[ -n "$_danger_result" ]]; then
 fi
 
 # ─── All checks passed — allow ────────────────────────────────────────────────
-audit_log "ALLOW" "pre-bash-check: command passed all checks | session=${_SESSION_ID} | cmd=$(_truncate "$_COMMAND" 200)"
+audit_log "ALLOW" "pre-bash-check: command passed all checks | session=${_SESSION_ID}"
 exit 0

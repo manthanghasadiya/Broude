@@ -14,8 +14,8 @@
 #   6. Prints a success summary
 
 
-BROUDE_HOME="${HOME}/.broude"
-CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+BROUDE_HOME="${BROUDE_INSTALL_DIR:-${HOME}/.broude}"
+CLAUDE_SETTINGS="${CLAUDE_SETTINGS_FILE:-${HOME}/.claude/settings.json}"
 INSTALL_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ echo ""
 info "Installing to ${BROUDE_HOME}..."
 
 if [[ -d "$BROUDE_HOME" ]]; then
-    warn "~/.broude already exists — updating in place"
+    warn "${BROUDE_HOME} already exists — updating in place"
 fi
 
 mkdir -p "$BROUDE_HOME"
@@ -81,12 +81,6 @@ fi
 
 header "Configuring Claude Code hooks..."
 
-BROUDE_HOOK_ENTRY='{
-  "type": "command",
-  "command": "'"${BROUDE_HOME}/hooks/session-audit.sh"'",
-  "timeout": 30
-}'
-
 mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
 
 if [[ ! -f "$CLAUDE_SETTINGS" ]]; then
@@ -102,6 +96,18 @@ if [[ ! -f "$CLAUDE_SETTINGS" ]]; then
             "type": "command",
             "command": "${BROUDE_HOME}/hooks/session-audit.sh",
             "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${BROUDE_HOME}/hooks/pre-bash-check.sh",
+            "timeout": 10
           }
         ]
       }
@@ -186,7 +192,7 @@ header "Running smoke test..."
 
 SMOKE_JSON='{"session_id":"install-test","type":"init","cwd":"'"${HOME}"'","timestamp":"2026-07-17T00:00:00Z"}'
 
-if echo "$SMOKE_JSON" | bash "${BROUDE_HOME}/hooks/session-audit.sh" > /tmp/broude_smoke_test.out 2>&1; then
+if echo "$SMOKE_JSON" | BROUDE_STATE_DIR="$BROUDE_HOME" bash "${BROUDE_HOME}/hooks/session-audit.sh" > /tmp/broude_smoke_test.out 2>&1; then
     ok "session-audit.sh ran successfully"
     echo ""
     echo "────────────────────────────────────────"
