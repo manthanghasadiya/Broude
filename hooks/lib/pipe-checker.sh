@@ -12,27 +12,6 @@
 #
 # DO NOT use set -e in this file — it propagates to callers.
 
-# ─── Allowlisted URLs ─────────────────────────────────────────────────────────
-# These URLs are trusted and exempt from pipe-to-shell blocking.
-# ONLY Broude's own install URL is allowlisted.
-_PIPE_ALLOWLIST=(
-    "raw.githubusercontent.com/manthanghasadiya/Broude"
-)
-
-# ─── _is_allowlisted ─────────────────────────────────────────────────────────
-# Check if a command matches the allowlist.
-# Returns 0 (true) if allowlisted, 1 if not.
-_is_allowlisted() {
-    local cmd="$1"
-    local entry
-    for entry in "${_PIPE_ALLOWLIST[@]}"; do
-        if [[ "$cmd" == *"$entry"* ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
 # ─── check_pipe_to_shell ─────────────────────────────────────────────────────
 # Detect download-and-execute patterns in a command string.
 # Usage: result=$(check_pipe_to_shell "command string")
@@ -42,11 +21,6 @@ check_pipe_to_shell() {
 
     # Empty/whitespace only — clean
     if [[ -z "${cmd// /}" ]]; then
-        return 0
-    fi
-
-    # Check allowlist first — if allowlisted, skip all checks
-    if _is_allowlisted "$cmd"; then
         return 0
     fi
 

@@ -25,10 +25,13 @@ jobs:
       - name: Run Phase 2 test suite
         run: bash tests/test-pre-bash-check.sh
 
+      - name: Run installer lifecycle suite
+        run: bash tests/test-install-lifecycle.sh
+
       - name: Shellcheck
         run: |
           sudo apt-get install -y shellcheck
-          shellcheck hooks/*.sh hooks/lib/*.sh --severity=warning || true
+          shellcheck hooks/*.sh hooks/lib/*.sh install.sh uninstall.sh tests/*.sh --severity=warning
 
   lint:
     runs-on: ubuntu-latest

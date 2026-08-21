@@ -3,7 +3,7 @@
 # Source this at the top of every hook script.
 
 BROUDE_VERSION="1.1.1"
-BROUDE_DIR="${HOME}/.broude"
+BROUDE_DIR="${BROUDE_STATE_DIR:-${HOME}/.broude}"
 BROUDE_LOG="${BROUDE_DIR}/audit.log"
 
 # Internal counters (reset per hook run)
@@ -155,10 +155,12 @@ audit_log() {
     local ts
     ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")"
 
-    # Create dir if needed
+    # Audit entries intentionally exclude command text, which may contain secrets.
     if [[ ! -d "$BROUDE_DIR" ]]; then
         mkdir -p "$BROUDE_DIR" 2>/dev/null || return 0
     fi
+    chmod 700 "$BROUDE_DIR" 2>/dev/null || true
 
-    printf '[%s] [%s] %s\n' "$ts" "$level" "$msg" >> "$BROUDE_LOG" 2>/dev/null || true
+    (umask 077; printf '[%s] [%s] %s\n' "$ts" "$level" "$msg" >> "$BROUDE_LOG") 2>/dev/null || true
+    chmod 600 "$BROUDE_LOG" 2>/dev/null || true
 }

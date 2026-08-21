@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Removed the installer URL allowlist, which could allow unrelated dangerous commands containing the trusted URL
+- Stopped writing command text to the audit log and restricted log permissions
+
 ### Fixed
+- Registered both hooks on a clean install and removed both hooks on uninstall
+- Added installer lifecycle tests for clean installs, repeat installs, settings merges, and uninstall
+- Isolated audit-log tests from the developer's real home directory
+- Made ShellCheck warnings fail CI
 - BROUDE_VERSION stuck at 1.0.0, now correctly shows current version
 - install.sh reads version dynamically from common.sh
 - GitHub Actions pinned to SHA hashes (supply chain hardening)

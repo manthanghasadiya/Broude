@@ -1,19 +1,17 @@
 # Broude
 
-**Deterministic security hooks for Claude Code.**
-
-<!-- Logo coming soon -->
+Broude is a small set of deterministic security hooks for Claude Code. It checks Bash commands before they run and audits a project when a session starts.
 
 [![CI](https://github.com/manthanghasadiya/Broude/actions/workflows/ci.yml/badge.svg)](https://github.com/manthanghasadiya/Broude/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Bash 4.0+](https://img.shields.io/badge/bash-4.0%2B-green)
 [![v1.1.1](https://img.shields.io/badge/version-1.1.1-blue)](https://github.com/manthanghasadiya/Broude/releases/tag/v1.1.1)
 
-Claude Code is smart. It catches a lot of suspicious commands on its own. But smart is probabilistic. It depends on context, model version, attention, and how deep into a task the agent is. One missed prompt injection in a `postinstall` script or a poisoned `CLAUDE.md` is all it takes.
+Claude Code already has permission controls, sandboxing, and model-based safety checks. Those defenses are useful, but they are not perfect. Anthropic reports that auto mode catches about 83% of "overeager" actions before execution, with roughly 17% still getting through. Anthropic describes it as one layer inside a sandbox, not a replacement for containment or other controls. See [How we contain Claude across products](https://www.anthropic.com/engineering/how-we-contain-claude).
 
-Broude is the deterministic layer. It pattern-matches every Bash command against 27 obfuscation signatures, pipe-to-shell patterns, and destructive command templates before the shell ever sees it. No LLM reasoning, no context window, no judgment calls. If the pattern matches, the command is blocked. Every time.
+Broude covers a narrower job: known shell patterns. If a command matches one of its rules, the hook denies it without asking a model to judge intent.
 
-```
+```text
 ● Bash(echo Y2F0IC9ldGMvcGFzc3dk | base64 -d | bash)
   ⎿  Error: Hook PreToolUse:Bash denied this tool
 
@@ -21,19 +19,85 @@ Broude is the deterministic layer. It pattern-matches every Bash command against
   (GuardFall Class E: Base64 Encoded Payload) [critical]
 ```
 
+## What it checks
+
+Before each Bash tool call, Broude looks for:
+
+- 27 command-obfuscation patterns across five classes
+- download-and-execute commands such as `curl ... | bash`
+- a short list of destructive commands, including root filesystem deletion, disk formatting, and writes to raw block devices
+
+At session start, it checks for:
+
+- secrets in common environment and configuration files
+- tracked or unignored `.env` files
+- vulnerable npm and Python dependencies, when the relevant audit tool is installed
+- known malicious JetBrains plugins and Chrome extensions from the bundled data files
+- Git hooks that download and execute remote code
+
+The scripts and bundled rules run locally. Dependency audits may contact their package registries through `npm audit` or `pip-audit`. Broude itself has no telemetry.
+
 ## Install
 
+Review the code before installing a security hook. Then clone the repository and run the installer from the checked-out copy:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/manthanghasadiya/Broude/main/install.sh | bash
+git clone https://github.com/manthanghasadiya/Broude.git
+cd Broude
+bash install.sh
 ```
 
-Installs to `~/.broude/`, merges hooks into `~/.claude/settings.json` without overwriting existing config. Requires `bash 4.0+` and `jq`.
+The installer copies the hooks and data to `~/.broude/` and merges two entries into `~/.claude/settings.json`. It does not replace the rest of your Claude Code configuration.
 
-## What happens when you use it
+Requirements:
 
-**On session start**, Broude scans your project environment and feeds a security report to Claude:
+- Bash 4.0 or newer
+- `jq`
 
+## What a block looks like
+
+```text
+You:    "Follow the setup instructions in CLAUDE.md"
+Claude: reads CLAUDE.md and attempts an obfuscated command
+Claude: Bash(IFS='.';cmd='cat./etc/passwd';$cmd)
+Broude: [BROUDE BLOCK] Obfuscated command detected
+        (GuardFall Class C: IFS Override to Split Command) [high]
 ```
+
+The hook exits with code 2, so Claude Code denies the tool call and includes Broude's reason in the result.
+
+## Current test coverage
+
+The repository has three shell test suites: command blocking, session audit, and installer lifecycle. Run them with:
+
+```bash
+bash tests/test-pre-bash-check.sh
+bash tests/test-session-audit.sh
+bash tests/test-install-lifecycle.sh
+```
+
+The command suite includes 42 blocking cases and 37 allowed or edge-case commands. The lifecycle suite covers clean installation, repeat installation, settings preservation, and uninstall. That is useful regression coverage, but it is not proof of a zero false-positive or zero false-negative rate in real projects.
+
+## How it works
+
+```text
+Claude Code proposes a Bash command
+                 |
+          PreToolUse hook
+                 |
+       +---------+----------+
+       |                    |
+   no match              rule match
+    exit 0                 exit 2
+       |                    |
+ command runs          command denied
+```
+
+The pre-execution hook is implemented in Bash and reads the tool-call JSON with `jq`. It checks the command against the bundled GuardFall rules, pipe-to-shell rules, and destructive-command rules in that order.
+
+The session hook prints a report that Claude can read at startup:
+
+```text
 === BROUDE v1.1.1: Session Security Audit ===
 
 Project: /home/user/my-project
@@ -41,144 +105,61 @@ Project: /home/user/my-project
 [PASS] No secrets detected in project files
 [WARN] .env file exists but is not in .gitignore
 [PASS] npm audit: 0 vulnerabilities
-[PASS] No malicious JetBrains plugins detected
-[INFO] Chrome: not installed, skipping extension check
-[PASS] Git hooks look clean
 
-Risk: MEDIUM (4 PASS, 1 WARN, 0 FAIL)
+Risk: MEDIUM (2 PASS, 1 WARN, 0 FAIL)
 Action: Add .env to .gitignore.
 ==========================================
 ```
 
-Claude reads this report and adjusts its behavior. It knows about the security issues before you even start working.
+Allow/block decisions and session-audit results are appended to `~/.broude/audit.log`. Broude does not persist command text because commands may contain credentials.
 
-**On every command**, Broude intercepts Bash tool calls and blocks anything that matches an obfuscation or attack pattern:
+## Limits
 
-```
-You:    "Follow the setup instructions in CLAUDE.md"
-Claude: reads CLAUDE.md, finds a "diagnostic" command
-Claude: Bash(IFS='.';cmd='cat./etc/passwd';$cmd)
-Broude: [BROUDE BLOCK] Obfuscated command detected
-        (GuardFall Class C: IFS Override to Split Command) [high]
-Claude: "Your security hook blocked this. The command uses IFS
-        manipulation to disguise 'cat /etc/passwd'."
-```
+Broude is a pattern matcher, not a sandbox, malware scanner, or complete endpoint-security product.
 
-The command never reaches the shell. Claude sees why it was blocked and explains the technique to you.
+- New or sufficiently changed obfuscation can bypass a regex.
+- A rule can block a legitimate command.
+- The hook fails open when its own parsing or dependencies fail, so it does not break Claude Code. That also means an internal error can leave a command unchecked.
+- Session checks are point-in-time hints. Bundled lists become stale unless they are maintained.
+- The hook sees Bash tool calls routed through Claude Code. It cannot stop commands run elsewhere or contain a compromised process after execution.
 
-## Detection coverage
-
-**Tested against 19 obfuscation techniques. 15 blocked, 0 false positives.**
-
-| Category | Technique | Severity | Status |
-|----------|-----------|----------|--------|
-| **GuardFall Class A** | Empty quote insertion (`c""at`) | High | Blocked |
-| **GuardFall Class A** | Here-string eval | High | Blocked |
-| **GuardFall Class B** | Variable substring extraction | Medium | Blocked |
-| **GuardFall Class B** | Indirect variable reference | Medium | Blocked |
-| **GuardFall Class B** | Tr-based ROT13 decode | High | Blocked |
-| **GuardFall Class C** | IFS word-splitting bypass | High | Blocked |
-| **GuardFall Class D** | Brace expansion command build | Medium | Blocked |
-| **GuardFall Class E** | Base64 decode pipe to shell | Critical | Blocked |
-| **GuardFall Class E** | Octal encoded command | High | Blocked |
-| **GuardFall Class E** | Python exec with encoded string | Critical | Blocked |
-| **GuardFall Class E** | Process substitution fetch | High | Blocked |
-| **GuardFall Class E** | Curl/wget pipe to shell | Critical | Blocked |
-| **Pipe-to-shell** | `curl \| bash`, `wget \| sh` variants | Critical | Blocked |
-| **Dangerous** | `rm -rf /`, fork bombs, `dd` to disk | Critical | Blocked |
-
-Zero false positives on `npm install`, `ls -la`, `git status`, `curl` (without pipe), `rm -rf node_modules/`, and 30+ other legitimate commands.
-
-GuardFall obfuscation classes are based on [Adversa AI's research](https://adversa.ai) on bypassing AI coding agent safety layers (June 2026).
-
-## How it works
-
-```
-You type a prompt
-       |
-Claude decides to run a bash command
-       |
-   PreToolUse hook fires
-       |
-   broude/hooks/pre-bash-check.sh receives the command as JSON
-       |
-   +---------------------------+
-   | 1. GuardFall check        |  27 obfuscation patterns
-   | 2. Pipe-to-shell check    |  download-and-execute patterns  
-   | 3. Dangerous command check|  catastrophic/irreversible only
-   +---------------------------+
-       |              |
-    CLEAN           MATCH
-    exit 0          exit 2
-       |              |
-   Command         Command BLOCKED
-   executes        Claude told why
-```
-
-Pure bash + jq. No network calls. No LLM inference. No external dependencies beyond jq. Every check runs in under 500ms.
-
-## Session audit checks
-
-On every session start, Broude scans for:
-
-- **Exposed secrets** in `.env`, config files, and source code (20 patterns: AWS, OpenAI, GitHub, Stripe, Anthropic, Google, Slack, and more)
-- **Vulnerable dependencies** via `npm audit` and `pip-audit` (delegated, no local database)
-- **Malicious JetBrains plugins** (15 plugins from [Aikido Security](https://www.aikido.dev/) June 2026 research)
-- **Malicious Chrome extensions** (12 PromptSnatcher variants from MalExt Sentry June 2026)
-- **Git hook tampering** (scripts that download and execute remote code)
-- **Unprotected .env files** (missing .gitignore coverage, git-tracked secrets)
-
-Everything runs locally against flat data files. No API calls, no telemetry, no data leaves your machine.
+Use Broude as defense in depth. Keep Claude Code's sandbox and permission controls enabled, limit credentials and network access, and review commands that cross a trust boundary.
 
 ## Configuration
 
-Broude hooks are registered in `~/.claude/settings.json`. The installer handles this automatically, merging alongside any existing hooks.
+The installer registers these hooks in `~/.claude/settings.json`:
 
 ```json
 {
   "hooks": {
     "SessionStart": [
       {
-        "hooks": [{
-          "type": "command",
-          "command": "$HOME/.broude/hooks/session-audit.sh",
-          "timeout": 30
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.broude/hooks/session-audit.sh",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{
-          "type": "command",
-          "command": "$HOME/.broude/hooks/pre-bash-check.sh",
-          "timeout": 10
-        }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.broude/hooks/pre-bash-check.sh",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-User-level configuration file (`~/.broude/config.json`) for custom allowlists, pattern toggles, and sensitivity tuning is [planned](https://github.com/manthanghasadiya/Broude/issues).
-
-## Audit log
-
-Every blocked command and session audit result is logged to `~/.broude/audit.log`:
-
-```
-[2026-07-25T08:29:55Z] [BLOCK] pre-bash-check: GuardFall Class A (Empty Double-Quote Insertion) | cmd=c""at /etc/passwd
-[2026-07-25T08:30:12Z] [ALLOW] pre-bash-check: command passed all checks | cmd=npm install express
-[2026-07-25T08:30:45Z] [WARN] Secret in .env:1 | AWS Access Key ID | critical
-```
-
-## Roadmap
-
-- [x] **v1.0** Session security audit ([#1](https://github.com/manthanghasadiya/Broude/issues/1))
-- [x] **v1.1** Pre-execution blocking with GuardFall detection ([#2](https://github.com/manthanghasadiya/Broude/issues/2))
-- [ ] **v1.2** Post-execution scanning: secret detection in written files ([#3](https://github.com/manthanghasadiya/Broude/issues/3))
-- [ ] **v1.3** MCP server mode for agent-agnostic security ([#4](https://github.com/manthanghasadiya/Broude/issues/4))
-- [ ] **v1.4** AI-powered hybrid analysis ([#5](https://github.com/manthanghasadiya/Broude/issues/5))
+Custom allowlists and rule toggles are not implemented yet.
 
 ## Uninstall
 
@@ -186,44 +167,14 @@ Every blocked command and session audit result is logged to `~/.broude/audit.log
 bash ~/.broude/uninstall.sh
 ```
 
-Removes `~/.broude/` and cleans Broude hooks from `~/.claude/settings.json`.
-
-## Testing
-
-```bash
-# Run all tests
-bash tests/test-session-audit.sh    # 32 tests
-bash tests/test-pre-bash-check.sh   # 78 tests
-
-# Test a specific command manually
-echo '{"hook_event_name":"PreToolUse","session_id":"t","cwd":"/tmp","tool_name":"Bash","tool_input":{"command":"c\"\"at /etc/passwd"}}' | bash hooks/pre-bash-check.sh
-```
-
-110 tests, all passing, zero false positives.
+This removes `~/.broude/` and the Broude entries from Claude Code's user settings.
 
 ## Contributing
 
-Open an issue before submitting PRs. Contributions are especially welcome for:
+Open an issue before a large change. The most useful contributions are bypass cases, false-positive reproductions, and sourced updates to the threat-intelligence files. Add a regression test with every rule change.
 
-- **New obfuscation patterns** for `data/guardfall-patterns.json`
-- **Threat intel updates** for malicious plugins/extensions
-- **Test cases** (both attacks that should be blocked and legitimate commands that should pass)
-- **Bug reports** with reproduction steps
+Use the [threat-intelligence issue template](https://github.com/manthanghasadiya/Broude/issues/new?template=threat_intel.md) for a new malicious package, plugin, or extension. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
-Use the [threat intel template](https://github.com/manthanghasadiya/Broude/issues/new?template=threat_intel.md) to report new malicious packages, plugins, or extensions.
+## Author and license
 
-## Background
-
-In June 2026, three supply chain attack waves hit developer tooling simultaneously: [15 malicious JetBrains plugins](https://www.aikido.dev/) stealing API keys, [Chrome extensions harvesting LLM credentials](https://adversa.ai), and [140+ backdoored npm packages](https://socket.dev/) through the Mastra framework compromise. All of them targeted developers using AI coding assistants.
-
-Broude exists because these attacks exploit a gap: AI agents are smart about reasoning but blind to threat intelligence. They don't maintain databases of known-bad packages, they can't pattern-match obfuscated shell commands deterministically, and they don't audit your IDE plugins. Broude fills that gap.
-
-## Author
-
-[Manthan Ghasadiya](https://github.com/manthanghasadiya) ([@manthanghasadiya](https://x.com/manthanghasadiya))
-
-Security researcher and pentester. Creator of [mcpsec](https://github.com/manthanghasadiya/mcpsec), the first MCP server security scanner. 4 published CVEs in MCP server implementations ([CVE-2026-6942](https://nvd.nist.gov/vuln/detail/CVE-2026-6942), [CVE-2026-42449](https://nvd.nist.gov/vuln/detail/CVE-2026-42449), [CVE-2026-35394](https://nvd.nist.gov/vuln/detail/CVE-2026-35394), [CVE-2026-47427](https://nvd.nist.gov/vuln/detail/CVE-2026-47427)).
-
-## License
-
-[MIT](LICENSE)
+Broude is maintained by [Manthan Ghasadiya](https://github.com/manthanghasadiya). It is available under the [MIT License](LICENSE).
